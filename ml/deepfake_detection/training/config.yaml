@@ -1,0 +1,75 @@
+# VoiceShield deepfake detection — training config.
+# Benchmarked on the target machine (GTX 1650, 4 GB, 12 cores).
+
+seed: 1337
+
+front_end:
+  sample_rate: 16000
+  segment_samples: 64600      # ~4.04 s, ASVspoof/AASIST convention (max length)
+  silence_policy: trim_edges  # see constants.py for why this is not "keep"
+  silence_top_db: 40.0
+  target_dbfs: -26.0
+  normalize: true
+
+data:
+  train_split: train
+  dev_split: dev
+  # "codec" is the offline telephony-codec render of the same utterances.
+  # Sampling between them is free at load time; doing codecs online costs 650 ms/utt.
+  train_variants: [clean, codec]
+  dev_variants: [clean]
+  num_workers: 8
+  # Dev EER on a stratified subsample every epoch; the full 24844-utt dev set
+  # only at the end. A full dev pass costs ~7 min, which is not worth paying
+  # ten times over just to pick a checkpoint.
+  dev_subsample: 6000
+
+# Variable-length training. The blueprint requires 1.5-2.0 s windows for
+# sub-500 ms alerting; the benchmark convention is ~4 s. Training across the
+# whole range gives one duration-agnostic model instead of a train/serve
+# mismatch or two separate models.
+variable_length:
+  enabled: true
+  min_samples: 32000          # 2.0 s — the streaming window
+  max_samples: 64600          # 4.04 s — the benchmark window
+
+augment:
+  rawboost_prob: 0.5
+  rawboost_algo: 4            # series(1,2,3) — best generalisation in the paper
+  codec_prob: 0.0             # handled offline, see data.train_variants
+  gain_prob: 0.3
+  gain_db_range: [-6.0, 6.0]
+
+model:
+  # SSL + spectral fusion: WavLM generalises across unseen synthesis methods,
+  # the spectral branch reads high-frequency (LFCC) and glottal-phase (MGD)
+  # artefacts the SSL branch is not specialised for. MGD is language-agnostic,
+  # which is what keeps the Indic-robustness claim defensible without Indic
+  # training data — and leaves the door open to adding it later.
+  name: fusion
+  ssl_name: microsoft/wavlm-base-plus
+  freeze_ssl: true            # 4 GB VRAM: full fine-tune needs ~24 GB
+  hidden_dim: 256
+  dropout: 0.3
+  use_layer_weights: true
+  spectral_channels: 32
+  spectral_embed: 128
+  use_mgd: true
+  use_lfcc: true
+
+training:
+  epochs: 8
+  # Fusion model measured at 20.6 utt/s @4.04s / 42.7 utt/s @2.0s, 2.12 GiB peak.
+  batch_size: 24
+  # Well below batch_size: eval runs in the same process as training and
+  # inherits a fragmented allocator. 48 OOMed at the first eval batch.
+  eval_batch_size: 16
+  lr: 0.001                   # head-only, so a much higher LR than fine-tuning
+  layer_weight_lr: 0.01       # layer weights are 13 scalars, they need to move faster
+  weight_decay: 0.0001
+  warmup_ratio: 0.05
+  grad_clip: 5.0
+  # fp16 autocast measured 4x SLOWER on this GPU (TU117 has no tensor cores),
+  # so mixed precision is deliberately off.
+  amp: false
+  early_stop_patience: 3
