@@ -3,3 +3,7 @@ uvicorn
 python-multipart
 pydantic
 websockets
+onnxruntime
+soundfile
+numpy
+scipy
