@@ -14,11 +14,30 @@ logger = logging.getLogger(__name__)
 async def websocket_analyze_stream(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connected for real-time analysis")
-    
+    # mod_audio_stream passes STREAM_EXTRA_HEADERS as HTTP headers
+    call_metadata = {}
+    for key, value in websocket.headers.items():
+        if key.startswith("x-"):
+            call_metadata[key] = value
+            
     try:
         while True:
-            # We expect the client to send valid audio bytes (e.g. WAV chunks)
-            data = await websocket.receive_bytes()
+            # We expect the client (e.g., FreeSWITCH) to send metadata as text and audio as bytes
+            message = await websocket.receive()
+            
+            if "text" in message:
+                try:
+                    meta = json.loads(message["text"])
+                    call_metadata.update(meta)
+                    logger.info(f"Received call metadata: {call_metadata}")
+                except json.JSONDecodeError:
+                    logger.warning("Received invalid text metadata")
+                continue
+                
+            if "bytes" not in message:
+                continue
+                
+            data = message["bytes"]
             
             if not data:
                 continue
@@ -61,6 +80,7 @@ async def websocket_analyze_stream(websocket: WebSocket):
                 "deepfake_detail": deepfake,
                 "risk_assessment": risk_result,
                 "prevention_status": prevention_action,
+                "metadata": call_metadata,
             }
             
             await websocket.send_json(response)

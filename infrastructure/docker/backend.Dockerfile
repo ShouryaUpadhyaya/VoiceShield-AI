@@ -14,7 +14,7 @@ COPY ml/requirements.txt ./ml/
 COPY ml/requirements-torch.txt ./ml/
 
 RUN pip install --no-cache-dir -r ml/requirements.txt
-RUN pip install --no-cache-dir -r ml/requirements-torch.txt
+RUN pip install --no-cache-dir -r ml/requirements-torch.txt --extra-index-url https://download.pytorch.org/whl/cu126
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy backend and ML source code
