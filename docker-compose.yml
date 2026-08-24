@@ -11,8 +11,10 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
+      - DHWANI_MODEL_PATH=/app/backend/models/dhwani/best_model.onnx
     volumes:
       - ./data:/app/data
+      - ./backend/models:/app/backend/models
 
   frontend:
     build:
