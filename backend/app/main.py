@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import audio
+from app.api.routes import audio, stream
 from app.services.deepfake_service import warm_up
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(audio.router, prefix="/api")
+app.include_router(stream.router, prefix="/api")
 
 
 @app.get("/")
