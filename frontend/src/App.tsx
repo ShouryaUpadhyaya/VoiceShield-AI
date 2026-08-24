@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Shield, ShieldAlert, Upload, Activity, Loader2, Fingerprint, Waveform, AlertTriangle } from 'lucide-react';
+import { Shield, ShieldAlert, Upload, Activity, Loader2, Fingerprint, Waveform, AlertTriangle, Lock } from 'lucide-react';
 
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [verificationState, setVerificationState] = useState<'PENDING' | 'VERIFYING' | 'COMPLETED'>('PENDING');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
       setResult(null);
+      setVerificationState('PENDING');
     }
   };
 
@@ -18,6 +20,7 @@ export default function App() {
     if (!file) return;
     
     setLoading(true);
+    setVerificationState('PENDING');
     const formData = new FormData();
     formData.append('file', file);
 
@@ -36,6 +39,13 @@ export default function App() {
     }
   };
 
+  const handleVerification = () => {
+    setVerificationState('VERIFYING');
+    setTimeout(() => {
+      setVerificationState('COMPLETED');
+    }, 2000);
+  };
+
   return (
     <div className="min-h-screen p-8 flex flex-col items-center bg-slate-950 text-slate-50 font-sans">
       <header className="mb-10 text-center mt-6">
@@ -45,7 +55,7 @@ export default function App() {
             VoiceShield AI
           </h1>
         </div>
-        <p className="text-slate-400 max-w-xl mx-auto text-lg">Multi-Signal Intelligence: Detecting AI deepfakes, verifying speaker identity, and analyzing behavioral prosody in real-time.</p>
+        <p className="text-slate-400 max-w-xl mx-auto text-lg">Multi-Signal Intelligence and Active Prevention.</p>
       </header>
 
       <main className="w-full max-w-5xl bg-slate-900 rounded-3xl border border-slate-800 p-8 shadow-2xl">
@@ -86,7 +96,6 @@ export default function App() {
               Intelligence Report
             </h2>
             
-            {/* 4 Cards for Signals */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
               <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-inner flex flex-col justify-between">
                 <div className="flex items-center gap-2 mb-3 text-slate-400">
@@ -132,36 +141,63 @@ export default function App() {
             </div>
 
             {/* Alert Box */}
-            <div className={`p-6 rounded-2xl border-2 flex items-start gap-5 ${
+            <div className={`p-6 rounded-2xl border-2 flex flex-col gap-5 ${
               result.risk_assessment.risk_level === 'HIGH' ? 'bg-red-950/40 border-red-900/80 text-red-100 shadow-[0_0_30px_-5px_rgba(220,38,38,0.3)]' :
               result.risk_assessment.risk_level === 'MEDIUM' ? 'bg-yellow-950/40 border-yellow-900/80 text-yellow-100' :
               'bg-emerald-950/40 border-emerald-900/80 text-emerald-100'
             }`}>
-              {result.risk_assessment.risk_level === 'HIGH' ? <ShieldAlert className="w-10 h-10 text-red-500 shrink-0 mt-1" /> : 
-               result.risk_assessment.risk_level === 'MEDIUM' ? <AlertTriangle className="w-10 h-10 text-yellow-500 shrink-0 mt-1" /> :
-               <Shield className="w-10 h-10 text-emerald-500 shrink-0 mt-1" />}
               
-              <div className="flex-1">
-                <h3 className="text-2xl font-black mb-2 tracking-tight">
-                  {result.risk_assessment.risk_level === 'HIGH' ? '🚨 HIGH IMPERSONATION RISK' : 
-                   result.risk_assessment.risk_level === 'MEDIUM' ? '⚠️ VERIFICATION RECOMMENDED' : 
-                   '✅ SECURE CONVERSATION'}
-                </h3>
-                <p className="opacity-90 mb-5 leading-relaxed text-lg">
-                  {result.risk_assessment.risk_level === 'HIGH' ? 'Multiple signals indicate a severe threat. High synthetic probability combined with poor speaker verification and prosodic anomalies.' :
-                   result.risk_assessment.risk_level === 'MEDIUM' ? 'Some indicators present conflicting signals. Speaker match may be low or prosody exhibits unnatural patterns.' :
-                   'All signals (Authenticity, Identity, and Prosody) align with genuine human speech patterns.'}
-                </p>
+              <div className="flex items-start gap-5">
+                {result.risk_assessment.risk_level === 'HIGH' ? <ShieldAlert className="w-10 h-10 text-red-500 shrink-0 mt-1" /> : 
+                 result.risk_assessment.risk_level === 'MEDIUM' ? <AlertTriangle className="w-10 h-10 text-yellow-500 shrink-0 mt-1" /> :
+                 <Shield className="w-10 h-10 text-emerald-500 shrink-0 mt-1" />}
                 
-                <div className="flex items-center justify-between bg-black/30 p-4 rounded-xl">
-                  <div className="flex flex-col">
-                    <span className="text-xs uppercase tracking-wider opacity-70 font-semibold mb-1">System Action Triggered</span>
+                <div className="flex-1">
+                  <h3 className="text-2xl font-black mb-2 tracking-tight">
+                    {result.risk_assessment.risk_level === 'HIGH' ? 'HIGH IMPERSONATION RISK' : 
+                     result.risk_assessment.risk_level === 'MEDIUM' ? 'VERIFICATION RECOMMENDED' : 
+                     'SECURE CONVERSATION'}
+                  </h3>
+                  <p className="opacity-90 mb-5 leading-relaxed text-lg">
+                    {result.risk_assessment.risk_level === 'HIGH' ? 'Multiple signals indicate a severe threat. High synthetic probability combined with poor speaker verification and prosodic anomalies.' :
+                     result.risk_assessment.risk_level === 'MEDIUM' ? 'Some indicators present conflicting signals. Speaker match may be low or prosody exhibits unnatural patterns.' :
+                     'All signals (Authenticity, Identity, and Prosody) align with genuine human speech patterns.'}
+                  </p>
+                  
+                  <div className="flex flex-col bg-black/30 p-4 rounded-xl mb-4">
+                    <span className="text-xs uppercase tracking-wider opacity-70 font-semibold mb-1">Prevention Status</span>
                     <span className="font-bold text-lg tracking-wide">
-                      {result.risk_assessment.recommended_action.replace(/_/g, ' ')}
+                      {result.prevention_status.status.replace(/_/g, ' ')}
                     </span>
+                    <span className="text-sm opacity-80 mt-1">{result.prevention_status.message}</span>
                   </div>
+                  
+                  {result.prevention_status.verification_required.length > 0 && verificationState === 'PENDING' && (
+                    <button 
+                      onClick={handleVerification}
+                      className="mt-2 px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg"
+                    >
+                      <Lock className="w-5 h-5" />
+                      Initiate {result.prevention_status.verification_required.join(' and ')}
+                    </button>
+                  )}
+                  
+                  {verificationState === 'VERIFYING' && (
+                    <div className="mt-2 flex items-center gap-3 text-red-300 font-semibold px-4 py-3 bg-red-900/30 rounded-xl border border-red-900/50">
+                      <Loader2 className="animate-spin w-5 h-5" />
+                      Contacting Supervisor and sending MFA code...
+                    </div>
+                  )}
+
+                  {verificationState === 'COMPLETED' && (
+                    <div className="mt-2 flex items-center gap-3 text-emerald-400 font-bold px-4 py-3 bg-emerald-950/50 rounded-xl border border-emerald-900/50">
+                      <Shield className="w-5 h-5" />
+                      Verification Successful. Transaction Authorized.
+                    </div>
+                  )}
                 </div>
               </div>
+
             </div>
 
           </div>
