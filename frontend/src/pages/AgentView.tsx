@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Shield, AlertTriangle, ShieldAlert, Lock, Fingerprint, Waveform, Activity, PhoneCall, LayoutDashboard, Loader2 } from 'lucide-react';
+import { Upload, Shield, AlertTriangle, ShieldAlert, Lock, Fingerprint, Radio, Activity, PhoneCall, LayoutDashboard, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { LiveRiskChart } from '../components/LiveRiskChart';
@@ -183,7 +183,7 @@ export function AgentView() {
                 
                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
                   <div className="flex items-center gap-3">
-                    <Waveform className="w-5 h-5 text-pink-400" />
+                    <Radio className="w-5 h-5 text-pink-400" />
                     <span className="font-semibold text-slate-300">Prosody Anomaly</span>
                   </div>
                   <span className="text-xl font-mono font-bold text-pink-400">{(result.signals.prosody_analysis.overall_prosody_risk * 100).toFixed(1)}%</span>
