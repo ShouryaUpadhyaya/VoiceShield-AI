@@ -23,38 +23,52 @@ The API response includes a `signal_provenance` block stating which signals come
 from a model and which are still placeholders. Nothing is presented as measured
 when it is not.
 
-## Quickstart
+## Quickstart (Monorepo)
+
+The project is structured as a monorepo using npm scripts for easy orchestration.
 
 ```bash
-# 1. Environment (Python 3.11; torch comes from the CUDA index separately)
-uv venv --python 3.11 .venv
-uv pip install --python .venv --index-url https://download.pytorch.org/whl/cu126 \
-    -r ml/requirements-torch.txt
-uv pip install --python .venv -r ml/requirements.txt
+# 1. Install all dependencies (Backend Python + Frontend Node)
+npm run setup
 
-# 2. Data (~7.5 GB; resumable, safe to interrupt)
-./ml/data/download_asvspoof.sh
+# 2. Run both the FastAPI backend and React frontend concurrently in development mode
+npm run dev
 
-# 3. Cache + manifests (fails loudly if the corpus does not match the official release)
-PYTHONPATH=. .venv/bin/python ml/data/build_cache.py --splits train dev eval
+# 3. Build the frontend for production
+npm run build
 
-# 4. Offline telephony-codec variants for the training split
-PYTHONPATH=. .venv/bin/python -c \
-    "from ml.data.build_cache import build_codec_variant; build_codec_variant('train')"
-
-# 5. Train
-PYTHONPATH=. .venv/bin/python ml/deepfake_detection/training/train.py
-
-# 6. Evaluate on unseen attacks
-PYTHONPATH=. .venv/bin/python ml/deepfake_detection/training/validate.py \
-    --checkpoint ml/artifacts/<run>/best.pt --split eval --codec-robustness
-
-# 7. Serve
-PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --app-dir backend --port 8000
-cd frontend && npm install && npm run dev
+# 4. Run tests
+npm run test
 ```
 
-`GET /health` reports whether the detector is actually loaded, so a degraded
+### ML Pipeline Tasks
+The ML model training is isolated due to its dependency on GPU resources and large datasets.
+
+```bash
+# 1. Data (~7.5 GB; resumable, safe to interrupt)
+./ml/data/download_asvspoof.sh
+
+# 2. Cache + manifests (fails loudly if the corpus does not match the official release)
+PYTHONPATH=. python ml/data/build_cache.py --splits train dev eval
+
+# 3. Train the model
+npm run ml:train
+```
+
+## Docker Deployment
+
+To run the entire stack (Frontend + Backend) using Docker Compose:
+
+```bash
+# Build and start the containers in detached mode
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+```
+The Frontend will be available at `http://localhost:8080` and the Backend API at `http://localhost:8000`.
+
+`GET /api/health` reports whether the detector is actually loaded, so a degraded
 deployment is visible instead of silently scoring every call as genuine.
 
 ## Layout
