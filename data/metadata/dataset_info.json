@@ -1,0 +1,61 @@
+{
+  "corpus": "ASVspoof 2019 LA",
+  "source": "HuggingFace mirror Bisher/ASVspoof_2019_LA of Edinburgh DataShare DS_10283_3336",
+  "license": "Open Data Commons Attribution License (ODC-By 1.0)",
+  "front_end": {
+    "sample_rate": 16000,
+    "silence_policy": "trim_edges",
+    "silence_top_db": 40.0,
+    "stored": "int16 PCM, DC-removed, NOT level-normalised, NOT cropped"
+  },
+  "splits": [
+    {
+      "split": "train",
+      "n_utterances": 25380,
+      "n_bonafide": 2580,
+      "n_spoof": 22800,
+      "n_speakers": 20,
+      "attacks": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06"
+      ],
+      "hours": 18.26,
+      "duration_s": {
+        "mean": 2.59,
+        "p05": 1.112,
+        "p95": 5.064,
+        "max": 12.616
+      },
+      "issues": []
+    },
+    {
+      "split": "dev",
+      "n_utterances": 24844,
+      "n_bonafide": 2548,
+      "n_spoof": 22296,
+      "n_speakers": 20,
+      "attacks": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06"
+      ],
+      "hours": 18.03,
+      "duration_s": {
+        "mean": 2.613,
+        "p05": 1.04,
+        "p95": 5.144,
+        "max": 11.16
+      },
+      "issues": []
+    }
+  ],
+  "speaker_overlap_between_splits": "none",
+  "attack_overlap_train_eval": []
+}
