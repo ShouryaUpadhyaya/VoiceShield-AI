@@ -1,0 +1,5 @@
+# Installed from the PyTorch CUDA 12.6 index ONLY (keep separate from PyPI deps
+# so we never need --index-strategy unsafe-best-match across indexes).
+#   uv pip install --python .venv --index-url https://download.pytorch.org/whl/cu126 -r ml/requirements-torch.txt
+torch==2.7.1+cu126
+torchaudio==2.7.1+cu126
