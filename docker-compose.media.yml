@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  freeswitch:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/freeswitch.Dockerfile
+    ports:
+      - "5060:5060/tcp"
+      - "5060:5060/udp"
+      - "16384-16484:16384-16484/udp"
+    volumes:
+      - ./infrastructure/freeswitch/conf/freeswitch.xml:/usr/local/freeswitch/conf/freeswitch.xml
+    depends_on:
+      - media-tester
+
+  media-tester:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/media-tester.Dockerfile
+    ports:
+      - "8005:8005"
