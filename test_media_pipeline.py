@@ -15,13 +15,19 @@ from sse_starlette.sse import EventSourceResponse
 class SSELogger:
     def __init__(self):
         self.clients: List[asyncio.Queue] = []
+        self.calls = {}
 
-    def log(self, message: str):
+    def log_event(self, event: dict):
+        # Format the event as a JSON string
         timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {message}"
+        event["timestamp"] = timestamp
+        log_entry = json.dumps(event)
         print(log_entry, flush=True)
         for client in self.clients:
             client.put_nowait(log_entry)
+
+    def log(self, message: str):
+        self.log_event({"type": "log", "message": message})
 
     async def add_client(self):
         q = asyncio.Queue()
@@ -58,20 +64,32 @@ async def get_logs(request: Request):
             
     return EventSourceResponse(event_generator())
 
+@app.get("/api/calls")
+async def get_calls():
+    return {"calls": sse_logger.calls}
+
 @app.websocket("/api/analyze-stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    sse_logger.log("WebSocket connected from FreeSWITCH.")
     
     call_metadata = {}
     for key, value in websocket.headers.items():
         if key.startswith("x-"):
             call_metadata[key] = value
             
-    if call_metadata:
-        sse_logger.log(f"Received initial headers metadata: {call_metadata}")
+    call_id = call_metadata.get("x-call_id", "unknown")
+    if call_id not in sse_logger.calls:
+        sse_logger.calls[call_id] = {
+            "id": call_id,
+            "status": "active",
+            "metadata": call_metadata,
+            "total_bytes": 0,
+            "start_time": datetime.now().isoformat()
+        }
+
+    sse_logger.log_event({"type": "call_start", "call": sse_logger.calls[call_id]})
+    sse_logger.log(f"WebSocket connected from FreeSWITCH for Call {call_id}.")
     
-    total_bytes = 0
     try:
         while True:
             message = await websocket.receive()
@@ -79,20 +97,29 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     meta = json.loads(message["text"])
                     call_metadata.update(meta)
-                    sse_logger.log(f"Received JSON text metadata: {call_metadata}")
+                    sse_logger.calls[call_id]["metadata"] = call_metadata
+                    sse_logger.log_event({"type": "metadata_update", "call_id": call_id, "metadata": call_metadata})
                 except Exception as e:
                     sse_logger.log(f"Failed to parse metadata text: {e}")
                 continue
                 
             if "bytes" in message:
                 chunk = message["bytes"]
-                total_bytes += len(chunk)
-                if total_bytes % 320000 == 0:  # Every 10 seconds of 16kHz L16 audio
-                    sse_logger.log(f"Received {total_bytes} bytes of raw audio so far...")
+                bytes_len = len(chunk)
+                sse_logger.calls[call_id]["total_bytes"] += bytes_len
+                
+                # Emit audio chunk event for graph
+                sse_logger.log_event({
+                    "type": "audio_chunk",
+                    "call_id": call_id,
+                    "bytes_received": bytes_len,
+                    "total_bytes": sse_logger.calls[call_id]["total_bytes"]
+                })
                 
     except WebSocketDisconnect:
-        sse_logger.log(f"WebSocket disconnected. Total bytes received: {total_bytes}")
-        sse_logger.log(f"Final session Metadata: {call_metadata}")
+        sse_logger.calls[call_id]["status"] = "ended"
+        sse_logger.calls[call_id]["end_time"] = datetime.now().isoformat()
+        sse_logger.log_event({"type": "call_end", "call_id": call_id, "call": sse_logger.calls[call_id]})
     except Exception as e:
         sse_logger.log(f"WebSocket Error: {e}")
 
