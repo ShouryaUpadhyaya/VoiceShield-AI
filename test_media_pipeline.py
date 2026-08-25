@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from typing import List
 
+import numpy as np
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,7 +94,10 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             message = await websocket.receive()
-            if "text" in message:
+            if message["type"] == "websocket.disconnect":
+                break
+                
+            if "text" in message and message.get("text"):
                 try:
                     meta = json.loads(message["text"])
                     call_metadata.update(meta)
@@ -103,20 +107,41 @@ async def websocket_endpoint(websocket: WebSocket):
                     sse_logger.log(f"Failed to parse metadata text: {e}")
                 continue
                 
-            if "bytes" in message:
+            if "bytes" in message and message.get("bytes"):
                 chunk = message["bytes"]
                 bytes_len = len(chunk)
                 sse_logger.calls[call_id]["total_bytes"] += bytes_len
+                
+                rms = 0.0
+                vad = False
+                spectrum = []
+                
+                try:
+                    audio_data = np.frombuffer(chunk, dtype=np.int16)
+                    if len(audio_data) > 0:
+                        rms = float(np.sqrt(np.mean(np.square(audio_data.astype(np.float32)))))
+                        vad = bool(rms > 500)
+                        fft_out = np.abs(np.fft.rfft(audio_data))
+                        bins = 32
+                        if len(fft_out) >= bins:
+                            split = np.array_split(fft_out, bins)
+                            spectrum = [float(np.mean(b)) for b in split]
+                except Exception as dsp_e:
+                    sse_logger.log(f"DSP Error: {dsp_e}")
                 
                 # Emit audio chunk event for graph
                 sse_logger.log_event({
                     "type": "audio_chunk",
                     "call_id": call_id,
                     "bytes_received": bytes_len,
-                    "total_bytes": sse_logger.calls[call_id]["total_bytes"]
+                    "total_bytes": sse_logger.calls[call_id]["total_bytes"],
+                    "rms": rms,
+                    "vad": vad,
+                    "spectrum": spectrum
                 })
                 
     except WebSocketDisconnect:
+        pass
         sse_logger.calls[call_id]["status"] = "ended"
         sse_logger.calls[call_id]["end_time"] = datetime.now().isoformat()
         sse_logger.log_event({"type": "call_end", "call_id": call_id, "call": sse_logger.calls[call_id]})

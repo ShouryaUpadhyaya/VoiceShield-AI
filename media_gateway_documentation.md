@@ -51,7 +51,40 @@ To manually verify the media pipeline with a real device (mobile or laptop):
    - You will see real-time logs indicating your SIP call connected, the WebSocket handshake completed, and the exact byte count of your real voice being streamed to the server.
    - Hang up the softphone to gracefully terminate the stream.
 
-## 4. Use Cases
+## 4. How to Route External Calls
+
+To place outbound calls to real external phone numbers (or receive them), you must configure FreeSWITCH with a **SIP Trunk Gateway** (like Twilio, SignalWire, or Telnyx).
+
+1. **Add your SIP Trunk Gateway**:
+   Create a new file (e.g., `infrastructure/freeswitch/conf/sip_profiles/external/my_provider.xml`):
+   ```xml
+   <include>
+     <gateway name="my_provider">
+       <param name="username" value="your_account_sid"/>
+       <param name="password" value="your_auth_token"/>
+       <param name="realm" value="provider.sip.com"/>
+       <param name="register" value="true"/>
+     </gateway>
+   </include>
+   ```
+2. **Update the Dialplan (`freeswitch.xml`)**:
+   Instead of using the `<action application="echo"/>` command, you bridge the call out through your configured gateway.
+   ```xml
+   <!-- Example: Route any 10-digit number out through 'my_provider' -->
+   <extension name="Outbound_Calls">
+     <condition field="destination_number" expression="^(\d{10})$">
+       <!-- 1. Intercept the audio for AI analysis -->
+       <action application="set" data="STREAM_EXTRA_HEADERS={&quot;call_id&quot;:&quot;${uuid}&quot;}"/>
+       <action application="set" data="stream_res=${uuid_audio_stream(${uuid} start ws://media-tester:8005/api/analyze-stream mono 16000)}"/>
+       
+       <!-- 2. Bridge the call to the external network -->
+       <action application="bridge" data="sofia/gateway/my_provider/$1"/>
+     </condition>
+   </extension>
+   ```
+3. Restart FreeSWITCH. Any call directed to a 10-digit number will now ring the external phone and still stream audio to the AI backend!
+
+## 5. Use Cases
 - **Enterprise PBX Integration**: A company can configure their existing PBX (like Asterisk or Cisco CallManager) to route calls through VoiceShield's FreeSWITCH gateway via a SIP Trunk.
 - **Telecom Carrier Peering**: Telecom operators can integrate VoiceShield at the carrier level using an SBC (Session Border Controller) communicating directly with our FreeSWITCH node.
 - **Consumer Mobile App**: Users on a mobile VoIP application (WebRTC or SIP) can have their calls routed through the media gateway to receive real-time deepfake alerts on their smartphone screens.

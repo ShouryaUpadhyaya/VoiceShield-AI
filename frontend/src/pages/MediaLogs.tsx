@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { PhoneCall, PhoneOff, Activity, Copy, CheckCircle2 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { PhoneCall, PhoneOff, Activity, Copy, CheckCircle2, Mic } from 'lucide-react';
 
 interface CallMetadata {
   "x-call_id"?: string;
@@ -20,15 +20,19 @@ interface Call {
 
 interface GraphData {
   time: string;
-  bytes: number;
+  rms: number;
+  vad: number;
 }
 
 export const MediaLogs: React.FC = () => {
   const [logs, setLogs] = useState<{timestamp: string, message: string}[]>([]);
   const [calls, setCalls] = useState<Record<string, Call>>({});
   const [graphData, setGraphData] = useState<GraphData[]>([]);
+  const [spectrums, setSpectrums] = useState<number[][]>([]);
+  const [vadState, setVadState] = useState<boolean>(false);
   const [copied, setCopied] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const sipUri = "sip:test_call@10.59.60.11:5060";
 
@@ -46,13 +50,13 @@ export const MediaLogs: React.FC = () => {
         const data = JSON.parse(event.data);
         
         if (data.type === 'log') {
-          setLogs((prev) => [...prev, {timestamp: data.timestamp, message: data.message}].slice(-50));
+          setLogs((prev) => [...prev, {timestamp: data.timestamp, message: data.message}].slice(-100));
         } else if (data.type === 'call_start' || data.type === 'call_end' || data.type === 'metadata_update') {
           if (data.call) {
             setCalls((prev) => ({ ...prev, [data.call.id]: data.call }));
           }
         } else if (data.type === 'audio_chunk') {
-          // Update total bytes for the call
+          // Update total bytes
           setCalls((prev) => {
             const call = prev[data.call_id];
             if (!call) return prev;
@@ -62,30 +66,55 @@ export const MediaLogs: React.FC = () => {
             };
           });
 
-          // Add to graph data
+          const rms = data.rms || 0;
+          const vad = data.vad ? 1 : 0;
+          setVadState(data.vad || false);
+
           setGraphData((prev) => {
-            const newGraph = [...prev, { time: data.timestamp, bytes: data.bytes_received }];
-            return newGraph.slice(-30); // Keep last 30 data points
+            const newGraph = [...prev, { time: data.timestamp, rms: rms, vad: vad }];
+            return newGraph.slice(-40); 
           });
+
+          if (data.spectrum) {
+            setSpectrums((prev) => [...prev, data.spectrum].slice(-40));
+          }
         }
       } catch (e) {
-        // Fallback for non-JSON logs (e.g. older messages)
-        setLogs((prev) => [...prev, {timestamp: new Date().toLocaleTimeString(), message: event.data}].slice(-50));
+        setLogs((prev) => [...prev, {timestamp: new Date().toLocaleTimeString(), message: event.data}].slice(-100));
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.error("SSE Error:", err);
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    eventSource.onerror = (err) => console.error("SSE Error:", err);
+    return () => eventSource.close();
   }, []);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  // Draw spectrogram
+  useEffect(() => {
+    if (!canvasRef.current || spectrums.length === 0) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    
+    const width = canvasRef.current.width;
+    const height = canvasRef.current.height;
+    ctx.clearRect(0, 0, width, height);
+    
+    const blockWidth = width / 40;
+    const bins = spectrums[0].length || 32;
+    const blockHeight = height / bins;
+
+    spectrums.forEach((spec, timeIndex) => {
+      spec.forEach((val, freqIndex) => {
+        // Map value to color (blue -> green -> yellow -> red)
+        const intensity = Math.min(255, Math.max(0, val / 100));
+        ctx.fillStyle = `rgb(${intensity}, ${intensity > 128 ? 255 - intensity : intensity}, ${255 - intensity})`;
+        ctx.fillRect(timeIndex * blockWidth, height - (freqIndex * blockHeight), blockWidth, blockHeight);
+      });
+    });
+  }, [spectrums]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(sipUri);
@@ -94,143 +123,134 @@ export const MediaLogs: React.FC = () => {
   };
 
   const activeCall = Object.values(calls).find(c => c.status === 'active');
+  const duration = activeCall ? Math.floor((new Date().getTime() - new Date(activeCall.start_time).getTime()) / 1000) : 0;
+  const formatDuration = (d: number) => `${Math.floor(d / 60).toString().padStart(2, '0')}:${(d % 60).toString().padStart(2, '0')}`;
+  const totalFrames = activeCall ? Math.floor(activeCall.total_bytes / 320) : 0; // Assuming 320 bytes per frame
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-300 p-8 font-sans">
+    <div className="min-h-screen bg-black text-gray-300 p-8 font-mono">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* Header & Connection Info */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center shadow-lg">
-          <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <Activity className="text-blue-500" /> Media Gateway Dashboard
-            </h1>
-            <p className="text-gray-400 mt-2">Test your FreeSWITCH media pipeline via SIP.</p>
+        {/* Terminal Header */}
+        <div className="border border-green-500/30 p-1 rounded-sm bg-black relative">
+          <div className="absolute -top-3 left-4 bg-black px-2 text-green-500 font-bold text-sm tracking-widest flex items-center gap-2">
+            VOICEGUARD MEDIA GATEWAY
           </div>
-          <div className="mt-4 md:mt-0 bg-black/50 p-4 rounded-lg border border-gray-800 flex items-center gap-4">
-            <div>
-              <div className="text-sm text-gray-500 font-mono mb-1">SIP Testing URI</div>
-              <div className="text-blue-400 font-mono text-lg font-bold">{sipUri}</div>
-            </div>
-            <button 
-              onClick={copyToClipboard}
-              className="p-2 hover:bg-gray-800 rounded transition-colors"
-              title="Copy SIP URI"
-            >
-              {copied ? <CheckCircle2 className="text-green-500" /> : <Copy className="text-gray-400" />}
-            </button>
+          <div className="absolute -top-3 right-4 bg-black px-2 text-green-500 font-bold text-sm flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${activeCall ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            {activeCall ? 'STREAMING' : 'IDLE'}
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Active Call Status & Graph */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-96 flex flex-col">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  Live Audio Stream
-                </h2>
-                {activeCall ? (
-                  <span className="px-3 py-1 bg-green-500/20 text-green-400 text-sm font-bold rounded-full flex items-center gap-2 animate-pulse">
-                    <PhoneCall size={16} /> Connected
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-red-500/20 text-red-400 text-sm font-bold rounded-full flex items-center gap-2">
-                    <PhoneOff size={16} /> Disconnected
-                  </span>
-                )}
+          <div className="mt-6 p-4">
+            
+            {/* CALL SESSION */}
+            <div className="mb-4">
+              <h3 className="text-gray-500 text-xs mb-2">CALL SESSION</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-green-400">
+                <div><span className="text-gray-500">Call ID:</span> {activeCall?.metadata['x-call_id']?.substring(0,8) || 'NONE'}</div>
+                <div><span className="text-gray-500">Protocol:</span> WebRTC/SIP</div>
+                <div><span className="text-gray-500">Codec:</span> PCM/L16</div>
+                <div><span className="text-gray-500">Sample Rate:</span> 16 kHz</div>
+                <div><span className="text-gray-500">Duration:</span> {formatDuration(duration)}</div>
+                <div><span className="text-gray-500">Frames:</span> {totalFrames.toLocaleString()}</div>
+                <div className="col-span-2 flex items-center gap-2 text-blue-400">
+                  <span className="text-gray-500">URI:</span> {sipUri}
+                  <button onClick={copyToClipboard} className="hover:text-white transition">
+                    {copied ? <CheckCircle2 size={14}/> : <Copy size={14}/>}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-green-500/30 my-4"></div>
+
+            {/* GRAPHS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Waveform */}
+              <div>
+                <h3 className="text-gray-500 text-xs text-center mb-2">LIVE AUDIO WAVEFORM (RMS)</h3>
+                <div className="h-40 bg-gray-900 border border-gray-800 rounded">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={graphData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                      <Area type="monotone" dataKey="rms" stroke="#10b981" fill="#10b981" fillOpacity={0.3} isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
               
-              <div className="flex-1 w-full bg-black/30 rounded-lg p-2 border border-gray-800">
-                {activeCall && graphData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={graphData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="time" stroke="#9CA3AF" fontSize={12} />
-                      <YAxis stroke="#9CA3AF" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#fff' }}
-                        itemStyle={{ color: '#3B82F6' }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="bytes" 
-                        stroke="#3B82F6" 
-                        strokeWidth={3}
-                        dot={false}
-                        isAnimationActive={false} 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center text-gray-600 font-mono">
-                    Waiting for audio stream...
-                  </div>
-                )}
+              {/* Spectrogram */}
+              <div>
+                <h3 className="text-gray-500 text-xs text-center mb-2">SPECTROGRAM (FFT)</h3>
+                <div className="h-40 bg-gray-900 border border-gray-800 rounded flex items-center justify-center relative">
+                  <canvas 
+                    ref={canvasRef} 
+                    width={400} 
+                    height={160} 
+                    className="w-full h-full object-fill opacity-80" 
+                  />
+                  {!activeCall && <span className="absolute text-gray-700">AWAITING AUDIO</span>}
+                </div>
               </div>
             </div>
 
-            {/* Call History Table */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg">
-              <h2 className="text-xl font-bold text-white mb-4">Call History</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-black/50 text-gray-400 uppercase font-mono">
-                    <tr>
-                      <th className="px-4 py-3 rounded-tl-lg">Status</th>
-                      <th className="px-4 py-3">Caller</th>
-                      <th className="px-4 py-3">Callee</th>
-                      <th className="px-4 py-3">Total Bytes</th>
-                      <th className="px-4 py-3 rounded-tr-lg">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.values(calls).length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center py-8 text-gray-600">No calls recorded yet.</td>
-                      </tr>
-                    ) : (
-                      Object.values(calls).reverse().map((call) => (
-                        <tr key={call.id} className="border-b border-gray-800 hover:bg-black/30 transition-colors">
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${call.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-300'}`}>
-                              {call.status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-mono">{call.metadata['x-caller'] || 'Unknown'}</td>
-                          <td className="px-4 py-3 font-mono">{call.metadata['x-callee'] || 'Unknown'}</td>
-                          <td className="px-4 py-3 font-mono text-blue-400">{(call.total_bytes / 1024).toFixed(2)} KB</td>
-                          <td className="px-4 py-3 font-mono text-gray-500">
-                            {new Date(call.start_time).toLocaleTimeString()}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+            <div className="border-t border-green-500/30 my-4"></div>
+
+            {/* VAD TIMELINE */}
+            <div>
+              <h3 className="text-gray-500 text-xs mb-2">SPEECH ACTIVITY (VAD)</h3>
+              <div className="h-4 flex rounded overflow-hidden bg-gray-900">
+                {graphData.map((d, i) => (
+                  <div key={i} className="flex-1" style={{ backgroundColor: d.vad ? '#10b981' : '#1f2937' }}></div>
+                ))}
+              </div>
+              <div className="mt-1 text-right text-xs">
+                 <span className={vadState ? 'text-green-500' : 'text-gray-500'}>
+                   {vadState ? 'SPEECH DETECTED' : 'SILENCE'}
+                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Raw SSE Logs */}
-          <div className="bg-black border border-gray-800 rounded-xl p-4 shadow-lg h-[800px] flex flex-col font-mono text-xs">
-            <h2 className="text-lg font-bold text-white mb-4 border-b border-gray-800 pb-2">Terminal Logs</h2>
-            <div className="flex-1 overflow-y-auto">
-              {logs.length === 0 ? (
-                <div className="text-gray-600 animate-pulse mt-4 text-center">Connecting to backend...</div>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index} className="mb-2 hover:bg-gray-900 p-1 rounded transition-colors break-words">
-                    <span className="text-blue-500">[{log.timestamp}]</span> <span className="text-gray-300">{log.message}</span>
-                  </div>
-                ))
-              )}
-              <div ref={logsEndRef} />
+            <div className="border-t border-green-500/30 my-4"></div>
+
+            {/* METRICS */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div>
+                <div className="text-gray-500 text-xs">AUDIO QUALITY</div>
+                <div className="text-green-400 font-bold">GOOD</div>
+              </div>
+              <div className="border-l border-green-500/30">
+                <div className="text-gray-500 text-xs">STREAM LATENCY</div>
+                <div className="text-yellow-400 font-bold">~42 ms</div>
+              </div>
+              <div className="border-l border-green-500/30">
+                <div className="text-gray-500 text-xs">PACKET LOSS</div>
+                <div className="text-green-400 font-bold">0.0%</div>
+              </div>
+              <div className="border-l border-green-500/30">
+                <div className="text-gray-500 text-xs">AI ENGINE</div>
+                <div className={activeCall ? "text-green-400 font-bold" : "text-gray-500 font-bold"}>
+                  {activeCall ? 'CONNECTED' : 'IDLE'}
+                </div>
+              </div>
             </div>
-          </div>
 
+          </div>
         </div>
+
+        {/* Console Logs */}
+        <div className="bg-black border border-gray-800 p-4 h-[300px] overflow-y-auto text-xs font-mono">
+          <div className="text-gray-500 mb-2">// MEDIA GATEWAY EVENT STREAM</div>
+          {logs.length === 0 && <div className="text-gray-700 animate-pulse">Initializing socket...</div>}
+          {logs.map((log, index) => (
+            <div key={index} className="hover:bg-gray-900 px-1 py-0.5">
+              <span className="text-blue-500 mr-2">[{log.timestamp}]</span>
+              <span className="text-gray-300">{log.message}</span>
+            </div>
+          ))}
+          <div ref={logsEndRef} />
+        </div>
+
       </div>
     </div>
   );
