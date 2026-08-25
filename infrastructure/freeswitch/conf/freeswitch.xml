@@ -12,6 +12,7 @@
         <load module="mod_sndfile"/>
         <load module="mod_audio_stream"/>
         <load module="mod_tone_stream"/>
+        <load module="mod_event_socket"/>
       </modules>
     </configuration>
 
@@ -22,6 +23,15 @@
       <settings>
         <param name="colorize" value="true"/>
         <param name="loglevel" value="debug"/>
+      </settings>
+    </configuration>
+
+    <configuration name="event_socket.conf" description="Socket Client">
+      <settings>
+        <param name="nat-map" value="false"/>
+        <param name="listen-ip" value="0.0.0.0"/>
+        <param name="listen-port" value="8021"/>
+        <param name="password" value="ClueCon"/>
       </settings>
     </configuration>
 
@@ -70,7 +80,7 @@
           <action application="set" data="STREAM_EXTRA_HEADERS={&quot;call_id&quot;:&quot;${uuid}&quot;, &quot;caller&quot;:&quot;${caller_id_number}&quot;, &quot;callee&quot;:&quot;${destination_number}&quot;}"/>
           <!-- Use the API command to start streaming -->
           <!-- We evaluate it in a variable assignment -->
-          <action application="set" data="stream_res=${uuid_audio_stream(${uuid} start ws://media-tester:8005/api/analyze-stream mono 16000)}"/>
+          <action application="set" data="stream_res=${uuid_audio_stream(${uuid} start ws://127.0.0.1:8005/api/analyze-stream mono 16000)}"/>
           <!-- Give the caller some audio (tone) to simulate ringing or just echo so they can test their own voice -->
           <!-- <action application="playback" data="tone_stream://%(1000,4000,425)"/> -->
           <action application="echo"/>

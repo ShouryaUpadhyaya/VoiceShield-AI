@@ -3,7 +3,6 @@ import json
 import logging
 import socket
 import time
-from datetime import datetime
 from typing import List
 
 import numpy as np
@@ -11,6 +10,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+from pydantic import BaseModel
 
 # Setup custom logger that also broadcasts to SSE
 class SSELogger:
@@ -68,6 +68,161 @@ async def get_logs(request: Request):
 @app.get("/api/calls")
 async def get_calls():
     return {"calls": sse_logger.calls}
+
+class RoutingConfig(BaseModel):
+    routingType: str = "internal"
+    providerName: str = ""
+    username: str = ""
+    password: str = ""
+    domain: str = ""
+    destinationRegex: str = "^(.*)$"
+    useManualIp: bool = False
+    manualIp: str = "10.59.60.11"
+
+@app.post("/api/routing")
+async def update_routing(config: RoutingConfig):
+    xml_template = f"""<?xml version="1.0"?>
+<document type="freeswitch/xml">
+  <section name="configuration" description="Various Configuration">
+    <configuration name="modules.conf" description="Modules">
+      <modules>
+        <load module="mod_console"/>
+        <load module="mod_logfile"/>
+        <load module="mod_sofia"/>
+        <load module="mod_dialplan_xml"/>
+        <load module="mod_commands"/>
+        <load module="mod_dptools"/>
+        <load module="mod_sndfile"/>
+        <load module="mod_audio_stream"/>
+        <load module="mod_tone_stream"/>
+        <load module="mod_event_socket"/>
+      </modules>
+    </configuration>
+
+    <configuration name="console.conf" description="Console Logger">
+      <mappings>
+        <map name="all" value="console,debug,info,notice,warning,err,crit,alert"/>
+      </mappings>
+      <settings>
+        <param name="colorize" value="true"/>
+        <param name="loglevel" value="debug"/>
+      </settings>
+    </configuration>
+
+    <configuration name="event_socket.conf" description="Socket Client">
+      <settings>
+        <param name="nat-map" value="false"/>
+        <param name="listen-ip" value="0.0.0.0"/>
+        <param name="listen-port" value="8021"/>
+        <param name="password" value="ClueCon"/>
+      </settings>
+    </configuration>
+
+    <configuration name="sofia.conf" description="Sofia Endpoint">
+      <global_settings>
+        <param name="log-level" value="0"/>
+        <param name="debug-presence" value="0"/>
+      </global_settings>
+      <profiles>
+        <profile name="internal">
+          <settings>
+            <param name="debug" value="0"/>
+            <param name="sip-trace" value="no"/>
+            <param name="context" value="public"/>
+            <param name="rfc2833-pt" value="101"/>
+            <param name="sip-port" value="5060"/>
+            <param name="dialplan" value="XML"/>
+            <param name="dtmf-duration" value="2000"/>
+            <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
+            <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
+            <param name="rtp-timer-name" value="soft"/>
+            <param name="local-network-acl" value="localnet.auto"/>
+            <param name="ext-rtp-ip" value="{config.manualIp if config.useManualIp else 'auto-nat'}"/>
+            <param name="ext-sip-ip" value="{config.manualIp if config.useManualIp else 'auto-nat'}"/>
+            <param name="rtp-ip" value="auto"/>
+            <param name="sip-ip" value="auto"/>
+          </settings>
+        </profile>
+"""
+    if config.routingType == "external":
+        xml_template += f"""        <profile name="external">
+          <gateways>
+            <gateway name="{config.providerName}">
+              <param name="username" value="{config.username}"/>
+              <param name="password" value="{config.password}"/>
+              <param name="realm" value="{config.domain}"/>
+              <param name="register" value="true"/>
+            </gateway>
+          </gateways>
+          <settings>
+            <param name="debug" value="0"/>
+            <param name="sip-trace" value="no"/>
+            <param name="sip-port" value="5080"/>
+            <param name="dialplan" value="XML"/>
+            <param name="context" value="public"/>
+            <param name="ext-rtp-ip" value="{config.manualIp if config.useManualIp else 'auto-nat'}"/>
+            <param name="ext-sip-ip" value="{config.manualIp if config.useManualIp else 'auto-nat'}"/>
+            <param name="rtp-ip" value="auto"/>
+            <param name="sip-ip" value="auto"/>
+          </settings>
+        </profile>
+"""
+    
+    xml_template += """      </profiles>
+    </configuration>
+
+    <configuration name="switch.conf" description="Core Config">
+      <settings>
+        <param name="rtp-start-port" value="16384"/>
+        <param name="rtp-end-port" value="16484"/>
+      </settings>
+    </configuration>
+  </section>
+
+  <section name="dialplan" description="Regex/XML Dialplan">
+    <context name="public">
+"""
+    
+    xml_template += f"""      <extension name="test_call">
+        <condition field="destination_number" expression="{config.destinationRegex}">
+          <action application="answer"/>
+          <action application="set" data="STREAM_EXTRA_HEADERS={{&quot;call_id&quot;:&quot;${{uuid}}&quot;, &quot;caller&quot;:&quot;${{caller_id_number}}&quot;, &quot;callee&quot;:&quot;${{destination_number}}&quot;}}"/>
+          <action application="set" data="stream_res=${{uuid_audio_stream(${{uuid}} start ws://127.0.0.1:8005/api/analyze-stream mono 16000)}}"/>
+"""
+    if config.routingType == "external":
+        xml_template += f"""          <action application="bridge" data="sofia/gateway/{config.providerName}/$1"/>
+"""
+    else:
+        xml_template += """          <action application="echo"/>
+"""
+
+    xml_template += """        </condition>
+      </extension>
+    </context>
+  </section>
+</document>
+"""
+    try:
+        with open("/app/freeswitch.xml", "w") as f:
+            f.write(xml_template)
+            
+        # Trigger ESL reloadxml
+        reader, writer = await asyncio.open_connection('127.0.0.1', 8021)
+        writer.write(b'auth ClueCon\n\n')
+        await writer.drain()
+        await reader.read(1024)
+        
+        writer.write(b'api reloadxml\n\n')
+        await writer.drain()
+        await reader.read(1024)
+        writer.close()
+        await writer.wait_closed()
+        
+        sse_logger.log(f"Routing updated to {config.routingType}. FreeSWITCH XML reloaded.")
+        return {"status": "success"}
+    except Exception as e:
+        sse_logger.log(f"Routing Update Error: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 @app.websocket("/api/analyze-stream")
 async def websocket_endpoint(websocket: WebSocket):

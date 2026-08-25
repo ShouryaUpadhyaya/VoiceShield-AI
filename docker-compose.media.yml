@@ -5,10 +5,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/freeswitch.Dockerfile
-    ports:
-      - "5060:5060/tcp"
-      - "5060:5060/udp"
-      - "16384-16484:16384-16484/udp"
+    network_mode: "host"
     volumes:
       - ./infrastructure/freeswitch/conf/freeswitch.xml:/usr/local/freeswitch/conf/freeswitch.xml
     depends_on:
@@ -18,5 +15,6 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/media-tester.Dockerfile
-    ports:
-      - "8005:8005"
+    network_mode: "host"
+    volumes:
+      - ./infrastructure/freeswitch/conf/freeswitch.xml:/app/freeswitch.xml

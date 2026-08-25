@@ -28,6 +28,11 @@ export function Dashboard() {
           </h1>
           <p className="text-slate-400 mt-2 text-lg">Real-Time Voice Impersonation Prevention</p>
         </div>
+        <div className="flex gap-4">
+          <Link to="/media-logs" className="text-sm font-bold text-white bg-indigo-600 px-5 py-3 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg flex items-center gap-2">
+            <LayoutDashboard className="w-5 h-5" /> Media Gateway
+          </Link>
+        </div>
       </header>
 
       {/* High-level metrics */}

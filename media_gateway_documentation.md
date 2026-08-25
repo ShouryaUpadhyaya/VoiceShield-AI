@@ -1,90 +1,58 @@
-# Media Gateway Pipeline Documentation
+# VoiceShield AI - Media Gateway Architecture & Implementation Guide
 
-## 1. Overview and Project Relation
-The Media Gateway Pipeline is a critical sub-system of the VoiceShield AI platform. Its primary responsibility is to bridge standard telecommunications protocols (SIP/RTP) to the modern, real-time web infrastructure required by our AI models.
+## 1. Overview & What It Does For You
+The VoiceShield AI Media Gateway acts as the "Ears" of the fraud prevention system. 
+In a real-world scenario, when a scammer calls a user's phone, their telecom provider routes the call through our FreeSWITCH instance. The Gateway intercepts these live telecom calls and streams a real-time copy of the audio to our AI processing nodes, while simultaneously connecting the caller to their destination. 
 
-When a potential victim receives a call from an attacker, the call routes through our FreeSWITCH media gateway. Instead of just passing the audio through, FreeSWITCH uses a custom C-module (`mod_audio_stream`) to asynchronously "fork" a copy of the audio and transmit it in real-time over WebSockets to our Python analysis engine.
+This allows VoiceShield to run its Deepfake detection models, analyze prosody, and flag synthetic voices instantly—all without delaying or interrupting the actual phone call!
 
-### How it relates to the whole project:
-- **Feeds the Deepfake Engine**: Provides the raw 16kHz L16 PCM audio chunks required by the PyTorch ML models.
-- **Feeds the DSP Engine**: Provides the identical audio stream for audio artifact detection.
-- **Feeds the Risk Engine**: Extracts Call-ID, Caller ID, and Callee ID from the SIP metadata and provides it to the risk scoring pipeline.
-- **Empowers the Frontend**: The backend combines the ML inferences with the SIP metadata and broadcasts it to the React frontend, allowing the end user to see exactly who is calling and whether the voice is synthetic.
+## 2. Tech Stack & Technologies Used
 
-## 2. Specific Implementation Details
-- **FreeSWITCH Dockerized**: The gateway runs in a dedicated Docker container (`drachtio-freeswitch-mrf` base) orchestrated by `docker-compose.media.yml`.
-- **Dialplan Configuration**: Located in `infrastructure/freeswitch/conf/freeswitch.xml`, the dialplan answers inbound calls and immediately triggers `uuid_audio_stream`.
-- **WebSocket Streaming**: 
-  - Host: `ws://media-tester:8005/api/analyze-stream`
-  - Audio Format: Mono, 16000 Hz, L16 PCM
-  - Metadata: Passed securely in the WebSocket HTTP upgrade handshake using `x-call_id`, `x-caller`, and `x-callee` headers.
-- **Media Tester**: A standalone FastAPI python server (`test_media_pipeline.py`) simulating the AI Backend to validate the media pipeline.
-- **Frontend Live Viewer**: Live logs of the testing pipeline are presented via SSE on the React frontend at `/media-logs`.
+### Core Telecom Engine
+- **FreeSWITCH (C/C++)**: A highly scalable software-defined telecom stack. It handles all SIP signaling, RTP media streaming, and bridging. It operates in Docker using `network_mode: "host"` to natively bind to the server's network interfaces, seamlessly navigating NAT issues.
 
-## 3. How to Test It Manually
+### AI Processing Backend
+- **Python Backend (`test_media_pipeline.py`)**: Built with **FastAPI**, **Uvicorn**, and **Pydantic**.
+- **NumPy**: Used for high-speed Digital Signal Processing (DSP).
+- **FreeSWITCH Event Socket Layer (ESL)**: Used via TCP (port 8021) to hot-reload configurations dynamically without restarting the server.
 
-To manually verify the media pipeline with a real device (mobile or laptop):
+### Real-Time Visualization Frontend
+- **React + Vite + TypeScript**: Modern frontend ecosystem.
+- **Shadcn UI & Tailwind CSS**: Premium, dark-mode component library used for building sleek, responsive dashboard interfaces.
+- **Recharts**: For rendering the live RMS Energy Waveform.
+- **HTML5 Canvas**: For rendering the high-performance Spectrogram matrix.
 
-### Prerequisites
-1. Start the media pipeline using Docker Compose:
-   ```bash
-   docker-compose -f docker-compose.media.yml up -d --build
-   ```
-2. Start the Frontend UI:
-   ```bash
-   docker-compose up -d frontend
-   ```
-3. Find your computer's local IP address (e.g., `192.168.1.100`).
+## 3. Communication Protocols
 
-### Execution
-1. **Download a SIP Client**:
-   - For Mobile (iOS/Android): Download **Linphone** or **Zoiper**.
-   - For Laptop (Windows/Mac): Download **MicroSIP** or **Linphone**.
-2. **Make the Call**:
-   - Open your SIP client app. No account setup or registration is needed.
-   - Dial the SIP URI targeting your FreeSWITCH container using your host IP:
-     `sip:test_call@<YOUR_LOCAL_IP>:5060`
-     *(Example: `sip:test_call@192.168.1.100:5060`)*
-3. **Verify the Results**:
-   - FreeSWITCH will answer the call instantly. You will hear an echo of your voice confirming the call is active.
-   - Navigate to the Frontend UI at `http://localhost:8085/media-logs`.
-   - You will see real-time logs indicating your SIP call connected, the WebSocket handshake completed, and the exact byte count of your real voice being streamed to the server.
-   - Hang up the softphone to gracefully terminate the stream.
+- **SIP (Session Initiation Protocol - Port 5060)**: Used by FreeSWITCH to establish, modify, and terminate calls with clients (like Linphone) or external trunks (like Twilio).
+- **RTP (Real-time Transport Protocol - Ports 16384-16484)**: Used to carry the actual voice audio data over UDP.
+- **WebSockets (Port 8005)**: Used by FreeSWITCH (`mod_audio_stream`) to stream raw `16kHz PCM mono` audio bytes directly into the Python AI backend in real-time.
+- **Server-Sent Events (SSE - Port 8005)**: Used by the Python backend to push live metrics (VAD, Spectrogram matrices, RMS) to the React frontend. SSE is highly efficient for unidirectional real-time data streaming.
 
-## 4. How to Route External Calls
+## 4. Features Implemented
 
-To place outbound calls to real external phone numbers (or receive them), you must configure FreeSWITCH with a **SIP Trunk Gateway** (like Twilio, SignalWire, or Telnyx).
+1. **Live DSP Visualizations**: The frontend translates raw audio bytes into three graphs:
+   - **Waveform (RMS)**: Shows raw audio energy/volume.
+   - **Spectrogram (FFT)**: Converts audio into frequency bins to visualize pitch/tone using an HTML5 Canvas.
+   - **VAD (Speech Activity)**: A timeline that distinguishes between human speech and silence.
+2. **WebSocket Stability**: The Python loop handles graceful disconnects (`websocket.disconnect`) to prevent server crashes when calls drop.
+3. **Dynamic IP Networking**: By binding FreeSWITCH to the host network natively, you never need to manually hardcode your Wi-Fi IP in XML files for local testing. It dynamically detects the host's LAN IP.
+4. **Dynamic External Routing UI**: A Shadcn configuration tab that accepts SIP Trunk credentials, generates FreeSWITCH XML configurations on the fly, and uses ESL to hot-reload the changes instantly!
 
-1. **Add your SIP Trunk Gateway**:
-   Create a new file (e.g., `infrastructure/freeswitch/conf/sip_profiles/external/my_provider.xml`):
-   ```xml
-   <include>
-     <gateway name="my_provider">
-       <param name="username" value="your_account_sid"/>
-       <param name="password" value="your_auth_token"/>
-       <param name="realm" value="provider.sip.com"/>
-       <param name="register" value="true"/>
-     </gateway>
-   </include>
-   ```
-2. **Update the Dialplan (`freeswitch.xml`)**:
-   Instead of using the `<action application="echo"/>` command, you bridge the call out through your configured gateway.
-   ```xml
-   <!-- Example: Route any 10-digit number out through 'my_provider' -->
-   <extension name="Outbound_Calls">
-     <condition field="destination_number" expression="^(\d{10})$">
-       <!-- 1. Intercept the audio for AI analysis -->
-       <action application="set" data="STREAM_EXTRA_HEADERS={&quot;call_id&quot;:&quot;${uuid}&quot;}"/>
-       <action application="set" data="stream_res=${uuid_audio_stream(${uuid} start ws://media-tester:8005/api/analyze-stream mono 16000)}"/>
-       
-       <!-- 2. Bridge the call to the external network -->
-       <action application="bridge" data="sofia/gateway/my_provider/$1"/>
-     </condition>
-   </extension>
-   ```
-3. Restart FreeSWITCH. Any call directed to a 10-digit number will now ring the external phone and still stream audio to the AI backend!
+## 5. How to Test the Gateway
 
-## 5. Use Cases
-- **Enterprise PBX Integration**: A company can configure their existing PBX (like Asterisk or Cisco CallManager) to route calls through VoiceShield's FreeSWITCH gateway via a SIP Trunk.
-- **Telecom Carrier Peering**: Telecom operators can integrate VoiceShield at the carrier level using an SBC (Session Border Controller) communicating directly with our FreeSWITCH node.
-- **Consumer Mobile App**: Users on a mobile VoIP application (WebRTC or SIP) can have their calls routed through the media gateway to receive real-time deepfake alerts on their smartphone screens.
+### Internal Testing (Echo Mode)
+1. Ensure the Docker containers (`freeswitch`, `media-tester`, `frontend`) are running.
+2. Open the Linphone app on your mobile device (ensure it's on the same Wi-Fi as your laptop).
+3. Dial `sip:test_call@<YOUR_LAPTOP_IP>:5060`.
+4. Open the Dashboard at `http://localhost:8085/media-logs`.
+5. Talk into your phone and watch the live Spectrogram and Waveform react!
+
+### External Trunk Routing (e.g. Twilio)
+To route the call to a real-world phone number:
+1. Open the Dashboard at `http://localhost:8085/media-logs`.
+2. Click the **External Routing** tab.
+3. Select **"External Trunk Bridge"**.
+4. (Optional) Check **"Use Manual IP Override"** and enter your laptop's Wi-Fi IP if FreeSWITCH struggles to auto-detect it.
+5. Enter your SIP trunk Provider Name, Username, Password, and Domain.
+6. Click **Save & Hot-Reload**. FreeSWITCH will apply the new routing rules instantly. Calling `sip:test_call@...` will now route out to the real world while streaming audio to the dashboard!
