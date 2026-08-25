@@ -26,6 +26,7 @@ async function processQueue() {
         await op();
       } catch (err) {
         logger.error('DATABASE_ERROR', { error: String(err) });
+        import('node:fs').then(fs => fs.appendFileSync('db_error.log', String(err) + '\n'));
       }
     }
   }

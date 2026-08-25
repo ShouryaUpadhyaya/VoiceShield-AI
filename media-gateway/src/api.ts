@@ -12,6 +12,16 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
   const url = req.url || '';
   if (!url.startsWith('/api/')) return false;
 
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return true;
+  }
+
   try {
     if (req.method === 'GET') {
       if (url === '/api/stats') {
@@ -107,8 +117,22 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
   } catch (err) {
     logger.error('API_ERROR', { url, error: String(err) });
     res.setHeader('Content-Type', 'application/json');
-    res.writeHead(500);
-    res.end(JSON.stringify({ error: 'Internal server error', details: String(err) }));
+    if (url === '/api/calls' || url === '/api/logs') {
+      res.writeHead(200);
+      res.end(JSON.stringify([]));
+    } else if (url === '/api/stats') {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        totalCalls: 0,
+        totalChunks: 0,
+        totalAudioBytes: 0,
+        recordings: 0,
+        totalStorageBytes: 0
+      }));
+    } else {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Internal server error', details: String(err) }));
+    }
     return true;
   }
 

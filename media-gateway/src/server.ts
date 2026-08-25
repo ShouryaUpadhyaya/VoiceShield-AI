@@ -366,17 +366,31 @@ function handleDisconnect(ws: WebSocket): void {
 // ── Startup ────────────────────────────────────────────────────────
 
 // Connect to ML service (non-blocking — gateway works without ML)
-mlClient.connect();
+if (process.env.NODE_ENV !== 'test') {
+  mlClient.connect();
 
-httpServer.listen(config.port, config.host, () => {
-  logger.info('GATEWAY_STARTED', {
-    port: config.port,
-    host: config.host,
-    mlUrl: config.mlWsUrl,
-    chunkDuration: `${config.chunkDurationSec}s`,
-    debugAudio: config.saveDebugAudio,
+  httpServer.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error('STARTUP_ERROR', { 
+        message: `Media Gateway could not start. Port ${config.port} is already in use. Check: lsof -i :${config.port}. If the existing VoiceShield gateway is already running, use it instead of starting another instance.`
+      });
+      process.exit(1);
+    } else {
+      logger.error('SERVER_ERROR', { error: err.message });
+      process.exit(1);
+    }
   });
-});
+
+  httpServer.listen(config.port, config.host, () => {
+    logger.info('GATEWAY_STARTED', {
+      port: config.port,
+      host: config.host,
+      mlUrl: config.mlWsUrl,
+      chunkDuration: `${config.chunkDurationSec}s`,
+      debugAudio: config.saveDebugAudio,
+    });
+  });
+}
 
 // ── Graceful shutdown ──────────────────────────────────────────────
 

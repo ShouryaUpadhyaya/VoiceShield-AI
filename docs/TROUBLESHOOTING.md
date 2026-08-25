@@ -49,3 +49,45 @@ adb logcat | grep 'RecorderServer'   # Daemon server logs
 - No logs at all from CV:WsSink → Media Gateway not enabled in CallVault settings, or gateway URL not configured
 - Phone can't reach gateway → Different WiFi networks, or firewall blocking port 8010
 - Dashboard shows "No active sessions" but gateway health shows a session → Dashboard WebSocket to `/dashboard` not connected (check browser console)
+
+## Development Infrastructure
+
+### Docker unavailable
+
+```bash
+docker info
+```
+If Docker daemon is not running, start Docker before: `docker compose up -d postgres`
+
+### Port 5432 occupied
+
+```bash
+ss -ltnp | grep 5432
+```
+Do not kill unrelated PostgreSQL processes automatically. Use the configured `15432` port for the Compose setup.
+
+### Port 8010 occupied
+
+```bash
+lsof -i :8010
+```
+If the existing Media Gateway is running, do not start another copy.
+
+### Database authentication error
+
+Verify:
+```
+DATABASE_URL
+```
+matches:
+```
+postgresql://postgres:voiceshield@localhost:15432/voiceshield
+```
+for the Docker configuration.
+
+### Frontend cannot connect
+
+Verify:
+- Media Gateway: `http://localhost:8010`
+- Frontend: `http://localhost:3000`
+- `NEXT_PUBLIC_GATEWAY_URL` is set to `http://localhost:8010` in `frontend/.env.local`

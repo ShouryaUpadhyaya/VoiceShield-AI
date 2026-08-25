@@ -18,32 +18,96 @@ for deepfake detection.
 | FreeSWITCH integration | ⬜ Planned |
 | SIP end-to-end test | ⬜ Planned |
 
-## Quick Start
+## Development Setup
 
-### 1. Start the Media Gateway
+### 1. Start PostgreSQL
 
 ```bash
 cd media-gateway
+docker compose up -d postgres
+```
+
+### 2. Verify PostgreSQL
+
+```bash
+docker compose ps
+```
+
+### 3. Apply Prisma schema
+
+```bash
+npx prisma db push
+```
+
+### 4. Start Media Gateway
+
+```bash
+npm run dev
+```
+
+Gateway:
+http://localhost:8010
+
+### 5. Start Next.js
+
+```bash
+cd ../frontend
 npm install
 npm run dev
 ```
 
-Gateway starts on `http://0.0.0.0:8010`. Dashboard at `http://localhost:8010/`.
+Frontend:
+http://localhost:3000
 
-### 2. Configure CallVault on Android
+### 6. Android
 
-1. Build and install the APK (see [docs/CALLVAULT.md](docs/CALLVAULT.md))
-2. Open CallVault → Settings → Enable "Media Gateway"
-3. Set WebSocket URL to `ws://<your-laptop-LAN-IP>:8010`
-4. Make a phone call — audio streams to the gateway in real time
+Use the LAN IP displayed by the dashboard:
 
-### 3. Run Tests
+```
+ws://<LAPTOP-LAN-IP>:8010
+```
+
+## Troubleshooting
+
+### Docker unavailable
 
 ```bash
-cd media-gateway
-npm test          # 50 tests (chunker, protocol, session)
-npx tsc --noEmit  # Type check
+docker info
 ```
+If Docker daemon is not running, start Docker before: `docker compose up -d postgres`
+
+### Port 5432 occupied
+
+```bash
+ss -ltnp | grep 5432
+```
+Do not kill unrelated PostgreSQL processes automatically.
+
+### Port 8010 occupied
+
+```bash
+lsof -i :8010
+```
+If the existing Media Gateway is running, do not start another copy.
+
+### Database authentication error
+
+Verify:
+```
+DATABASE_URL
+```
+matches:
+```
+postgresql://postgres:voiceshield@localhost:15432/voiceshield
+```
+for the Docker configuration.
+
+### Frontend cannot connect
+
+Verify:
+Media Gateway: `http://localhost:8010`
+Frontend: `http://localhost:3000`
+`NEXT_PUBLIC_GATEWAY_URL` is set to `http://localhost:8010` in `frontend/.env.local`
 
 ## Architecture
 

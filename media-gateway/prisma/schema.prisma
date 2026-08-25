@@ -8,14 +8,19 @@ generator client {
 }
 
 model calls {
-  id          String    @id @default(uuid())
-  session_id  String
-  source      String
-  started_at  DateTime  @default(now())
-  ended_at    DateTime?
-  duration_ms Int?
-  status      String
-  created_at  DateTime  @default(now())
+  id                String              @id @default(uuid())
+  session_id        String
+  source            String
+  started_at        DateTime            @default(now())
+  ended_at          DateTime?
+  duration_ms       Int?
+  status            String
+  created_at        DateTime            @default(now())
+  call_sessions     call_sessions[]
+  audio_streams     audio_streams[]
+  audio_chunks      audio_chunks[]
+  recordings        recordings[]
+  connection_events connection_events[]
 }
 
 model call_sessions {
@@ -25,6 +30,7 @@ model call_sessions {
   status     String
   created_at DateTime  @default(now())
   ended_at   DateTime?
+  calls      calls     @relation(fields: [call_id], references: [id])
 }
 
 model audio_streams {
@@ -36,6 +42,7 @@ model audio_streams {
   bytes_received Int
   duration_ms    Int
   created_at     DateTime @default(now())
+  calls          calls    @relation(fields: [call_id], references: [id])
 }
 
 model audio_chunks {
@@ -47,6 +54,7 @@ model audio_chunks {
   byte_size       Int
   status          String
   created_at      DateTime @default(now())
+  calls           calls    @relation(fields: [call_id], references: [id])
 
   @@unique([call_id, sequence_number])
 }
@@ -59,6 +67,7 @@ model recordings {
   size_bytes   Int
   duration_ms  Int
   created_at   DateTime @default(now())
+  calls        calls    @relation(fields: [call_id], references: [id])
 }
 
 model ml_results {
@@ -80,6 +89,7 @@ model connection_events {
   timestamp      DateTime @default(now())
   remote_address String?
   details_json   Json?
+  calls          calls?   @relation(fields: [call_id], references: [id])
 }
 
 model system_events {
