@@ -3,3 +3,4 @@ dist/
 .env
 debug-recordings/
 *.pcm
+.agents/\n.claude/\n.cursor/\n.devin/\nprisma.config.ts

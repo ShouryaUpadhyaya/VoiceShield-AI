@@ -10,15 +10,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "send-test": "tsx scripts/send-test-audio.ts",
-    "fake-ml": "tsx scripts/fake-ml-server.ts"
+    "fake-ml": "tsx scripts/fake-ml-server.ts",
+    "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@prisma/client": "^5.22.0",
     "@types/node": "^22.5.0",
     "@types/ws": "^8.5.12",
+    "prisma": "^5.22.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"

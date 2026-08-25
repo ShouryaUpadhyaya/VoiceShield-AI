@@ -18,7 +18,12 @@ import { parseMessage, ProtocolError } from './protocol.js';
 import { SessionManager, type AudioSession } from './session.js';
 import { MlClient } from './ml-client.js';
 import { DebugRecorder } from './debug-recorder.js';
+import { CallRecorder } from './call-recorder.js';
+import { persistSessionStart, persistChunk, persistSessionStop } from './persistence.js';
+import { getLocalIpAddresses, getRecommendedLanIp } from './network.js';
 import { logger, setLogLevel } from './logger.js';
+import { handleApiRequest } from './api.js';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,10 +40,16 @@ setLogLevel(config.logLevel);
 const sessionManager = new SessionManager(config.chunkDurationSec);
 const mlClient = new MlClient(config.mlWsUrl);
 const debugRecorder = config.saveDebugAudio ? new DebugRecorder(config.debugAudioDir) : null;
+const callRecorder = new CallRecorder(path.join(__dirname, '..', 'data', 'calls'));
+const callIdMap = new Map<string, string>();
 
 // ── HTTP Server (health endpoint) ──────────────────────────────────
 
-const httpServer = http.createServer((req, res) => {
+const httpServer = http.createServer(async (req, res) => {
+  if (await handleApiRequest(req, res)) {
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/health') {
     const health = {
       status: 'ok',
@@ -46,6 +57,11 @@ const httpServer = http.createServer((req, res) => {
       activeSessions: sessionManager.activeCount,
       sessions: sessionManager.getSessionInfos(),
       uptime: process.uptime(),
+      network: {
+        recommendedIp: getRecommendedLanIp(),
+        interfaces: getLocalIpAddresses(),
+        port: config.port,
+      }
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(health, null, 2));
@@ -91,6 +107,18 @@ const dashboardClients = new Set<WebSocket>();
 
 dashboardWss.on('connection', (ws) => {
   dashboardClients.add(ws);
+  
+  // Send initial gateway state
+  ws.send(JSON.stringify({
+    type: 'gateway_state',
+    status: 'ONLINE',
+    network: {
+      recommendedIp: getRecommendedLanIp(),
+      interfaces: getLocalIpAddresses(),
+      port: config.port,
+    }
+  }));
+
   ws.on('close', () => dashboardClients.delete(ws));
 });
 
@@ -161,6 +189,17 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
       try {
         const session = sessionManager.createSession(msg);
         wsSessionMap.set(ws, session);
+        
+        const callId = randomUUID();
+        callIdMap.set(session.sessionId, callId);
+        
+        callRecorder.start(
+          session.sessionId,
+          session.format.sampleRate,
+          session.format.channels,
+          session.format.encoding,
+        );
+        persistSessionStart(session, callId);
 
         // Start debug recording if enabled
         if (debugRecorder) {
@@ -205,12 +244,22 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
       // Send partial chunk to ML if it exists
       if (partial) {
         mlClient.sendChunk(session.sessionId, partial, session.format);
+        const callId = callIdMap.get(session.sessionId);
+        if (callId) persistChunk(callId, partial);
       }
 
       // Stop debug recording
       if (debugRecorder) {
         debugRecorder.stop(session.sessionId);
       }
+      
+      callRecorder.stop(session.sessionId).then((recordingInfo) => {
+        const callId = callIdMap.get(session.sessionId);
+        if (callId) {
+          persistSessionStop(session, callId, recordingInfo);
+          callIdMap.delete(session.sessionId);
+        }
+      });
 
       sessionManager.removeSession(session.sessionId);
       wsSessionMap.delete(ws);
@@ -248,6 +297,7 @@ function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
   if (debugRecorder) {
     debugRecorder.write(session.sessionId, data);
   }
+  callRecorder.write(session.sessionId, data);
 
   const rms = computeRMS(data);
   broadcastToDashboard({
@@ -255,15 +305,30 @@ function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
     session_id: session.sessionId,
     rms,
     status: session.status,
-    bytes: session.totalBytesReceived
+    bytes: session.totalBytesReceived,
+    buffered_bytes: session.chunker.bufferedBytes,
+    chunk_bytes: session.chunker.chunkBytes,
+    chunks_emitted: session.chunker.currentSequence,
   });
 
   // Push through the chunker
   const chunks = session.pushAudio(data);
 
-  // Forward complete chunks to ML
+  // Forward complete chunks to ML and Dashboard
   for (const chunk of chunks) {
     mlClient.sendChunk(session.sessionId, chunk, session.format);
+    
+    const callId = callIdMap.get(session.sessionId);
+    if (callId) persistChunk(callId, chunk);
+    
+    broadcastToDashboard({
+      type: 'chunk_created',
+      session_id: session.sessionId,
+      sequence: chunk.sequence,
+      bytes: chunk.data.length,
+      durationMs: chunk.durationMs,
+      timestampMs: chunk.timestampMs,
+    });
   }
 }
 
@@ -276,12 +341,22 @@ function handleDisconnect(ws: WebSocket): void {
       const partial = session.stop();
       if (partial) {
         mlClient.sendChunk(session.sessionId, partial, session.format);
+        const callId = callIdMap.get(session.sessionId);
+        if (callId) persistChunk(callId, partial);
       }
     }
 
     if (debugRecorder) {
       debugRecorder.stop(session.sessionId);
     }
+    
+    callRecorder.stop(session.sessionId).then((recordingInfo) => {
+      const callId = callIdMap.get(session.sessionId);
+      if (callId) {
+        persistSessionStop(session, callId, recordingInfo);
+        callIdMap.delete(session.sessionId);
+      }
+    });
 
     sessionManager.removeSession(session.sessionId);
     wsSessionMap.delete(ws);
@@ -310,6 +385,7 @@ function shutdown(): void {
   sessionManager.stopAll();
   mlClient.disconnect();
   debugRecorder?.stopAll();
+  callRecorder.stopAll();
   wss.close();
   httpServer.close();
   process.exit(0);

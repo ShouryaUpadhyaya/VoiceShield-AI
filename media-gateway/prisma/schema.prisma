@@ -1,0 +1,93 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model calls {
+  id          String    @id @default(uuid())
+  session_id  String
+  source      String
+  started_at  DateTime  @default(now())
+  ended_at    DateTime?
+  duration_ms Int?
+  status      String
+  created_at  DateTime  @default(now())
+}
+
+model call_sessions {
+  id         String    @id @default(uuid())
+  call_id    String
+  session_id String
+  status     String
+  created_at DateTime  @default(now())
+  ended_at   DateTime?
+}
+
+model audio_streams {
+  id             String   @id @default(uuid())
+  call_id        String
+  sample_rate    Int
+  channels       Int
+  encoding       String
+  bytes_received Int
+  duration_ms    Int
+  created_at     DateTime @default(now())
+}
+
+model audio_chunks {
+  id              String   @id @default(uuid())
+  call_id         String
+  sequence_number Int
+  timestamp_ms    Int
+  duration_ms     Int
+  byte_size       Int
+  status          String
+  created_at      DateTime @default(now())
+
+  @@unique([call_id, sequence_number])
+}
+
+model recordings {
+  id           String   @id @default(uuid())
+  call_id      String
+  storage_path String
+  format       String
+  size_bytes   Int
+  duration_ms  Int
+  created_at   DateTime @default(now())
+}
+
+model ml_results {
+  id             String   @id @default(uuid())
+  audio_chunk_id String
+  model_name     String
+  model_version  String
+  result_json    Json
+  latency_ms     Int
+  status         String
+  created_at     DateTime @default(now())
+}
+
+model connection_events {
+  id             String   @id @default(uuid())
+  call_id        String?
+  session_id     String?
+  event_type     String
+  timestamp      DateTime @default(now())
+  remote_address String?
+  details_json   Json?
+}
+
+model system_events {
+  id            String   @id @default(uuid())
+  timestamp     DateTime @default(now())
+  level         String
+  event_type    String
+  session_id    String?
+  message       String
+  metadata_json Json?
+}

@@ -13,10 +13,10 @@ Real-time call-audio media gateway that receives audio from multiple sources (Ca
                             WebSocket
                           (JSON + binary)
                                   │
-                         ┌────────┴──────────┐
-                         │   MEDIA GATEWAY   │
-                         │  Node + TypeScript │
-                         │    port 8010       │
+                         ┌────────┴──────────┐       ┌─────────────────┐
+                         │   MEDIA GATEWAY   ├──────►│   POSTGRESQL    │
+                         │  Node + TypeScript │       │  Call Metadata  │
+                         │    port 8010       │       └─────────────────┘
                          └────────▲──────────┘
                                   │
                             WebSocket
@@ -37,8 +37,15 @@ npm install
 # Run tests (50 tests across chunker, protocol, session)
 npm test
 
+# Setup PostgreSQL Database
+docker compose up -d postgres
+npx prisma db push
+
 # Start the gateway
 npm run dev
+
+# Open the dashboard
+http://localhost:8010/
 
 # In another terminal, start the fake ML server
 npm run fake-ml
@@ -142,6 +149,7 @@ ML_WS_URL=ws://localhost:8011
 CHUNK_DURATION_SEC=3
 SAVE_DEBUG_AUDIO=false
 DEBUG_AUDIO_DIR=./debug-recordings
+DATABASE_URL=postgresql://postgres:password@localhost:5432/voiceshield
 LOG_LEVEL=info
 ```
 
