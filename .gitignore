@@ -2,6 +2,7 @@ node_modules/
 frontend/node_modules/
 .env
 .env.*
+!.env.example
 dist/
 build/
 __pycache__/
@@ -35,3 +36,18 @@ ml/artifacts_*.log
 # findings rather than bulk data and ARE tracked.
 data/metadata/labels.csv
 data/metadata/labels_*.csv
+
+# CallVault is a separate git repo; tracked via its own .git
+CallVault/
+
+# Binary downloads
+*.AppImage
+
+# Debug recordings from media gateway
+media-gateway/debug-recordings/
+
+# Logs
+*.log
+
+# Demo relay (temporary dev tool)
+demo-relay/

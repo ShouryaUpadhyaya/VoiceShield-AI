@@ -19,6 +19,13 @@ import { SessionManager, type AudioSession } from './session.js';
 import { MlClient } from './ml-client.js';
 import { DebugRecorder } from './debug-recorder.js';
 import { logger, setLogLevel } from './logger.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── Bootstrap ──────────────────────────────────────────────────────
 
@@ -45,16 +52,56 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fs.readFileSync(indexPath));
+      return;
+    }
+  }
+
   res.writeHead(404);
   res.end('Not Found');
 });
 
 // ── WebSocket Server (audio ingestion) ─────────────────────────────
 
-const wss = new WebSocketServer({ server: httpServer });
+const wss = new WebSocketServer({ noServer: true });
+const dashboardWss = new WebSocketServer({ noServer: true });
+
+httpServer.on('upgrade', (request, socket, head) => {
+  const pathname = request.url;
+  if (pathname === '/dashboard') {
+    dashboardWss.handleUpgrade(request, socket, head, (ws) => {
+      dashboardWss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/' || pathname === '') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
 
 // Track which session is associated with each WebSocket connection
 const wsSessionMap = new Map<WebSocket, AudioSession>();
+const dashboardClients = new Set<WebSocket>();
+
+dashboardWss.on('connection', (ws) => {
+  dashboardClients.add(ws);
+  ws.on('close', () => dashboardClients.delete(ws));
+});
+
+function broadcastToDashboard(msg: any) {
+  const payload = JSON.stringify(msg);
+  for (const client of dashboardClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  }
+}
 
 wss.on('connection', (ws, req) => {
   const remoteAddr = req.socket.remoteAddress ?? 'unknown';
@@ -180,6 +227,16 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
   }
 }
 
+function computeRMS(buffer: Buffer): number {
+  if (buffer.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i += 2) {
+    const val = buffer.readInt16LE(i);
+    sum += val * val;
+  }
+  return Math.sqrt(sum / (buffer.length / 2));
+}
+
 function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
   const session = wsSessionMap.get(ws);
   if (!session) {
@@ -191,6 +248,15 @@ function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
   if (debugRecorder) {
     debugRecorder.write(session.sessionId, data);
   }
+
+  const rms = computeRMS(data);
+  broadcastToDashboard({
+    type: 'stats',
+    session_id: session.sessionId,
+    rms,
+    status: session.status,
+    bytes: session.totalBytesReceived
+  });
 
   // Push through the chunker
   const chunks = session.pushAudio(data);
@@ -253,4 +319,4 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 // Export for testing
-export { httpServer, wss, sessionManager, mlClient };
+export { httpServer, wss, dashboardWss, sessionManager, mlClient };
