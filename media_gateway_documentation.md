@@ -6,6 +6,11 @@ In a real-world scenario, when a scammer calls a user's phone, their telecom pro
 
 This allows VoiceShield to run its Deepfake detection models, analyze prosody, and flag synthetic voices instantly—all without delaying or interrupting the actual phone call!
 
+## 2. Use Cases & Value Proposition
+- **Real-Time Scam Prevention**: Intercepts calls to vulnerable individuals, analyzes the audio for deepfakes or known scammer voiceprints, and drops the call or alerts the user if a threat is detected.
+- **Enterprise Call Center Security**: Integrates seamlessly with existing enterprise PBX systems (like Twilio, Cisco, or Asterisk) to passively monitor incoming customer support calls for impersonation attempts.
+- **Telecom Network Level Protection**: Can be deployed at the SIP trunk level by telecom operators to screen all calls traversing their network for AI-generated audio before it reaches the end user.
+
 ## 2. Tech Stack & Technologies Used
 
 ### Core Telecom Engine
@@ -48,11 +53,14 @@ This allows VoiceShield to run its Deepfake detection models, analyze prosody, a
 4. Open the Dashboard at `http://localhost:8085/media-logs`.
 5. Talk into your phone and watch the live Spectrogram and Waveform react!
 
-### External Trunk Routing (e.g. Twilio)
-To route the call to a real-world phone number:
+### External Trunk Routing (e.g., Twilio, SignalWire, Telnyx)
+To route the call out to the real telecom network (PSTN), you must add a SIP Provider. 
 1. Open the Dashboard at `http://localhost:8085/media-logs`.
 2. Click the **External Routing** tab.
 3. Select **"External Trunk Bridge"**.
 4. (Optional) Check **"Use Manual IP Override"** and enter your laptop's Wi-Fi IP if FreeSWITCH struggles to auto-detect it.
-5. Enter your SIP trunk Provider Name, Username, Password, and Domain.
-6. Click **Save & Hot-Reload**. FreeSWITCH will apply the new routing rules instantly. Calling `sip:test_call@...` will now route out to the real world while streaming audio to the dashboard!
+5. Enter your **Provider Name** (e.g., `twilio`), **Username**, **Password**, and **SIP Domain** (e.g., `your-domain.pstn.twilio.com`).
+6. Click **Save & Hot-Reload**.
+
+**What this does:**
+The backend generates a secure `gateway` profile in the FreeSWITCH XML and updates the dialplan to `<action application="bridge" data="sofia/gateway/twilio/$1"/>`. FreeSWITCH's Event Socket Layer (ESL) is then triggered to apply these changes instantly. When you dial `sip:test_call@...`, FreeSWITCH will now route the call out to the real world while continuing to stream the live audio back to the AI dashboard!
