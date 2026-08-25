@@ -1,11 +1,13 @@
 # VoiceShield AI — Project Status
 
-**Last updated:** 2026-08-24
+**Last updated:** 2026-08-25
 **Branch:** `main`
 **Purpose of this document:** an unvarnished account of what exists, what is
 claimed, what is not built, and where the project would fail if examined
 closely. It is written to be useful to whoever picks this up next, including
 future us.
+
+*Recent Merges:* Integrated the `Dhwani` ONNX deepfake detector, the new real-time React Security Dashboard with WebSockets, and the Telephony/Media Gateway. The experimental remote streaming bridge (`ariktadas144/feat/ml-detection-pipeline`) has been compared but kept separate pending conflict resolution with the new gateway architecture.
 
 ---
 
@@ -67,14 +69,14 @@ engine, and the React upload UI.
 | SSL model (WavLM + ASP) | **Trained** | dev EER 0.49% — in-domain, see caveats |
 | Fusion model (SSL + LFCC/MGD) | **Training** | variable-length 2–4 s |
 | ASVspoof 2021 eval harness | **Code done, data downloading** | baselines already recomputed from keys |
-| FastAPI backend | **Wired to real model** | lifespan load, window pooling, calibrated output, 503 on missing model |
+| FastAPI backend | **Wired to real model** | Dhwani ONNX pipeline, window pooling, calibrated output, 503 on missing model |
 | Speaker verification | **Placeholder** | `random.uniform()`, labelled in `signal_provenance` |
 | Prosody analysis | **Placeholder** | `random.uniform()`, labelled in `signal_provenance` |
 | Call-context risk | **Placeholder** | substring match on the filename |
 | Risk fusion + prevention | **Real logic** | deterministic weighted fusion, rule-based actions |
-| React frontend | **Works, minimal** | single-file upload UI |
+| React frontend | **Done, dashboard** | Live security dashboard, real-time WS client, risk gauge, waveform |
 | Database / persistence | **Not started** | all model files 0 bytes |
-| Streaming (WebSocket/gRPC) | **Not started** | — |
+| Streaming (WebSocket/gRPC) | **Implemented** | Telephony/Media gateway pipeline, SSE logging |
 | Auth / DPDP compliance | **Not started** | — |
 
 ### 3.1 Verified findings
