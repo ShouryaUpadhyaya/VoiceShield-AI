@@ -1,0 +1,26 @@
+{
+  "name": "media-gateway",
+  "version": "0.1.0",
+  "description": "Real-time call-audio media gateway — hackathon MVP",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "send-test": "tsx scripts/send-test-audio.ts",
+    "fake-ml": "tsx scripts/fake-ml-server.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
