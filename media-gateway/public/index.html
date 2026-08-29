@@ -236,39 +236,40 @@
     </div>
   </main>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     const dot = document.getElementById('connection-dot');
     const text = document.getElementById('connection-text');
     const grid = document.getElementById('sessions-grid');
     const emptyState = document.getElementById('empty-state');
     
-    let ws;
+    let socket;
     const sessions = new Map();
 
     function connect() {
-      ws = new WebSocket(`ws://${window.location.host}/dashboard`);
+      socket = io('/dashboard');
       
-      ws.onopen = () => {
+      socket.on('connect', () => {
         dot.classList.add('connected');
         text.innerText = 'Connected';
-      };
+      });
 
-      ws.onclose = () => {
+      socket.on('disconnect', () => {
         dot.classList.remove('connected');
         text.innerText = 'Disconnected';
-        setTimeout(connect, 2000);
-      };
+      });
 
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'gateway_state') {
-          updateNetworkInfo(msg.network);
-        } else if (msg.type === 'stats') {
-          updateSession(msg);
-        } else if (msg.type === 'chunk_created') {
-          addChunkBlock(msg);
-        }
-      };
+      socket.on('gateway_state', (msg) => {
+        updateNetworkInfo(msg.network);
+      });
+
+      socket.on('stats', (msg) => {
+        updateSession(msg);
+      });
+
+      socket.on('chunk_created', (msg) => {
+        addChunkBlock(msg);
+      });
     }
 
     function updateNetworkInfo(network) {

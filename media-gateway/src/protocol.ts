@@ -52,17 +52,29 @@ export class ProtocolError extends Error {
 
 // ── Parser ──────────────────────────────────────────────────────────
 
-/**
- * Attempt to parse a text WebSocket message as a protocol message.
- * Throws ProtocolError for malformed or unsupported messages.
- */
-export function parseMessage(raw: string): ProtocolMessage {
+export function parseMessage(data: Buffer | string): ProtocolMessage {
+  let text = '';
+  if (Buffer.isBuffer(data)) {
+    text = data.toString('utf8');
+  } else {
+    text = data;
+  }
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new ProtocolError('Invalid JSON', 'INVALID_JSON');
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new ProtocolError('Invalid JSON format', 'INVALID_JSON');
   }
+
+  return validateProtocolMessage(parsed);
+}
+
+/**
+ * Attempt to validate an object as a protocol message.
+ * Throws ProtocolError for malformed or unsupported messages.
+ */
+export function validateProtocolMessage(parsed: unknown): ProtocolMessage {
 
   if (typeof parsed !== 'object' || parsed === null) {
     throw new ProtocolError('Message must be a JSON object', 'NOT_OBJECT');

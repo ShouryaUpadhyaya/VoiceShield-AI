@@ -23,8 +23,11 @@ function parseArgs() {
       opts[args[i].slice(2)] = args[i + 1];
     }
   }
+  const rawUrl = opts.url ?? 'ws://localhost:8010';
+  const url = rawUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+  
   return {
-    url: opts.url ?? 'ws://localhost:8010',
+    url,
     duration: parseInt(opts.duration ?? '10', 10),
     rate: parseInt(opts.rate ?? '16000', 10),
     source: opts.source ?? 'test-synthetic',
@@ -87,11 +90,11 @@ async function main() {
 
   // Connect
   console.log(`Connecting to ${config.url}...`);
-  const ws = new WebSocket(config.url);
+  const socket = new WebSocket(config.url);
 
   await new Promise<void>((resolve, reject) => {
-    ws.on('open', resolve);
-    ws.on('error', reject);
+    socket.on('open', resolve);
+    socket.on('error', reject);
   });
   console.log('Connected!\n');
 
@@ -104,16 +107,20 @@ async function main() {
     channels: CHANNELS,
     encoding: 'pcm_s16le',
   };
-  ws.send(JSON.stringify(startMsg));
+  socket.send(JSON.stringify(startMsg));
   console.log('→ session.start sent');
 
   // Wait for ack
   await new Promise<void>((resolve) => {
-    ws.once('message', (data) => {
+    const handler = (data: Buffer | string) => {
       const resp = JSON.parse(data.toString());
-      console.log(`← ${resp.type}: chunk_bytes=${resp.chunk_bytes} duration=${resp.chunk_duration_ms}ms`);
-      resolve();
-    });
+      if (resp.type === 'session.started') {
+        console.log(`← session.started: chunk_bytes=${resp.chunk_bytes} duration=${resp.chunk_duration_ms}ms`);
+        socket.off('message', handler);
+        resolve();
+      }
+    };
+    socket.on('message', handler);
   });
 
   // Send PCM frames
@@ -124,7 +131,7 @@ async function main() {
   while (bytesSent < pcm.length) {
     const end = Math.min(bytesSent + FRAME_SIZE, pcm.length);
     const frame = pcm.subarray(bytesSent, end);
-    ws.send(frame);
+    socket.send(frame);
     bytesSent += frame.length;
     frameCount++;
 
@@ -141,29 +148,34 @@ async function main() {
   console.log(`\n→ Sent ${bytesSent.toLocaleString()} bytes in ${frameCount} frames (${elapsed.toFixed(1)}s)\n`);
 
   // Session stop
-  ws.send(JSON.stringify({ type: 'session.stop', session_id: sessionId }));
+  // Session stop
+  socket.send(JSON.stringify({ type: 'session.stop', session_id: sessionId }));
   console.log('→ session.stop sent');
 
   // Wait for stop ack
   await new Promise<void>((resolve) => {
-    ws.once('message', (data) => {
+    const handler = (data: Buffer | string) => {
       const resp = JSON.parse(data.toString());
-      console.log(`← ${resp.type}:`);
-      console.log(`   total_chunks: ${resp.total_chunks}`);
-      console.log(`   total_bytes:  ${resp.total_bytes?.toLocaleString()}`);
-      console.log(`   invariant_ok: ${resp.invariant_ok}`);
-      console.log('');
+      if (resp.type === 'session.stopped') {
+        console.log(`← session.stopped:`);
+        console.log(`   total_chunks: ${resp.total_chunks}`);
+        console.log(`   total_bytes:  ${resp.total_bytes?.toLocaleString()}`);
+        console.log(`   invariant_ok: ${resp.invariant_ok}`);
+        console.log('');
 
-      if (resp.total_chunks === expectedTotalChunks) {
-        console.log(`✅ PASS: Got expected ${expectedTotalChunks} total chunks (${completeChunks} complete + ${remainder > 0 ? '1 partial' : '0 partial'})`);
-      } else {
-        console.log(`❌ FAIL: Expected ${expectedTotalChunks} total chunks, got ${resp.total_chunks}`);
+        if (resp.total_chunks === expectedTotalChunks) {
+          console.log(`✅ PASS: Got expected ${expectedTotalChunks} total chunks (${completeChunks} complete + ${remainder > 0 ? '1 partial' : '0 partial'})`);
+        } else {
+          console.log(`❌ FAIL: Expected ${expectedTotalChunks} total chunks, got ${resp.total_chunks}`);
+        }
+        socket.off('message', handler);
+        resolve();
       }
-      resolve();
-    });
+    };
+    socket.on('message', handler);
   });
 
-  ws.close();
+  socket.close();
   console.log('\nDone.');
   process.exit(0);
 }

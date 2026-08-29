@@ -1,7 +1,6 @@
 import { SystemStats, Call } from './types';
 
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8010';
-
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || (typeof window !== 'undefined' ? `http://${window.location.hostname}:8010` : 'http://localhost:8010');
 export async function fetchStats(): Promise<SystemStats> {
   const res = await fetch(`${GATEWAY_URL}/api/stats`);
   if (!res.ok) throw new Error('Failed to fetch stats');

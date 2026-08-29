@@ -95,7 +95,7 @@ export default function Overview() {
   
   const [copied, setCopied] = useState(false);
 
-  const wsUrl = network ? `ws://${network.recommendedIp}:${network.port}` : 'Waiting for network...';
+  const wsUrl = network ? `http://${network.recommendedIp}:${network.port}` : 'Waiting for network...';
 
   const copyUrl = () => {
     navigator.clipboard.writeText(wsUrl);

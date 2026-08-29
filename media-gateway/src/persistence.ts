@@ -1,10 +1,16 @@
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { logger } from './logger.js';
 import type { AudioSession } from './session.js';
 import type { RecordingInfo } from './call-recorder.js';
 import type { ChunkOutput } from './chunker.js';
 
-export const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+
+export const prisma = new PrismaClient({ adapter });
 
 // In-memory queue to ensure DB operations don't block audio loop
 const eventQueue: (() => Promise<void>)[] = [];

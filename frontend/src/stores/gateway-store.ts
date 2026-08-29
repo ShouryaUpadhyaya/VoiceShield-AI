@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { GatewayStatus, LiveSession, NetworkInfo, Chunk } from '../lib/types';
+import { io, Socket } from 'socket.io-client';
 
 interface GatewayState {
   status: GatewayStatus;
@@ -16,7 +17,7 @@ interface GatewayState {
   disconnectWebsocket: () => void;
 }
 
-let ws: WebSocket | null = null;
+let socket: Socket | null = null;
 
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: 'OFFLINE',
@@ -60,61 +61,67 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   }),
 
   connectWebsocket: (url) => {
-    if (ws) return;
-    const socket = new WebSocket(url);
-    ws = socket;
+    if (socket) return;
+    // Replace ws:// with http:// for socket.io since it upgrades over HTTP
+    const httpUrl = url.replace('ws://', 'http://').replace('wss://', 'https://');
     
-    socket.onopen = () => {
-      if (ws === socket) set({ status: 'ONLINE' });
-    };
+    // Connect specifically to the /dashboard namespace
+    const ioSocket = io(httpUrl.endsWith('/dashboard') ? httpUrl : `${httpUrl}/dashboard`, {
+      transports: ['websocket'] // optional: force websocket transport
+    });
+    socket = ioSocket;
     
-    socket.onclose = () => {
-      if (ws === socket) {
+    ioSocket.on('connect', () => {
+      if (socket === ioSocket) set({ status: 'ONLINE' });
+    });
+    
+    ioSocket.on('disconnect', () => {
+      if (socket === ioSocket) {
         set({ status: 'OFFLINE' });
-        ws = null;
-        setTimeout(() => get().connectWebsocket(url), 2000); // auto reconnect
       }
-    };
+    });
     
-    socket.onmessage = (event) => {
-      if (ws !== socket) return;
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'gateway_state') {
-          get().setNetwork(msg.network);
-          get().setStatus('ONLINE');
-        } else if (msg.type === 'stats') {
-          get().updateSession(msg.session_id, {
-            status: msg.status,
-            rms: msg.rms,
-            bytes: msg.bytes,
-            bufferedBytes: msg.buffered_bytes,
-            chunkBytes: msg.chunk_bytes,
-            chunksEmitted: msg.chunks_emitted
-          });
-        } else if (msg.type === 'chunk_created') {
-          get().addChunk(msg.session_id, {
-            sequence: msg.sequence,
-            bytes: msg.bytes,
-            durationMs: msg.durationMs,
-            timestampMs: msg.timestampMs,
-            mlStatus: 'SENT'
-          });
-        } else if (msg.type === 'session.stopped') {
-          get().updateSession(msg.session_id, { status: 'COMPLETED' });
-          setTimeout(() => get().removeSession(msg.session_id), 10000); // clear after 10s
-        }
-      } catch (err) {
-        console.error('WS Parse Error', err);
-      }
-    };
+    ioSocket.on('gateway_state', (msg) => {
+      if (socket !== ioSocket) return;
+      get().setNetwork(msg.network);
+      get().setStatus('ONLINE');
+    });
+
+    ioSocket.on('stats', (msg) => {
+      if (socket !== ioSocket) return;
+      get().updateSession(msg.session_id, {
+        status: msg.status,
+        rms: msg.rms,
+        bytes: msg.bytes,
+        bufferedBytes: msg.buffered_bytes,
+        chunkBytes: msg.chunk_bytes,
+        chunksEmitted: msg.chunks_emitted
+      });
+    });
+
+    ioSocket.on('chunk_created', (msg) => {
+      if (socket !== ioSocket) return;
+      get().addChunk(msg.session_id, {
+        sequence: msg.sequence,
+        bytes: msg.bytes,
+        durationMs: msg.durationMs,
+        timestampMs: msg.timestampMs,
+        mlStatus: 'SENT'
+      });
+    });
+
+    ioSocket.on('session.stopped', (msg) => {
+      if (socket !== ioSocket) return;
+      get().updateSession(msg.session_id, { status: 'COMPLETED' });
+      setTimeout(() => get().removeSession(msg.session_id), 10000); // clear after 10s
+    });
   },
 
   disconnectWebsocket: () => {
-    if (ws) {
-      const socket = ws;
-      ws = null;
-      socket.close();
+    if (socket) {
+      const s = socket;
+      socket = null;
+      s.disconnect();
     }
   }
 }));

@@ -30,12 +30,12 @@ describe('Synthetic Database E2E', () => {
   });
 
   it('should process a call and persist to actual PostgreSQL database', async () => {
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
+    const socket = new WebSocket(`ws://127.0.0.1:${PORT}`);
     
-    await new Promise((resolve) => ws.on('open', resolve));
+    await new Promise((resolve) => socket.on('open', resolve));
     
     // 1. Start session
-    ws.send(JSON.stringify({
+    socket.send(JSON.stringify({
       type: 'session.start',
       session_id: sessionId,
       source: 'synthetic-test',
@@ -49,18 +49,18 @@ describe('Synthetic Database E2E', () => {
     // 2. Send 960,000 bytes (10 seconds of 48kHz mono PCM16)
     // Create a predictable pattern to verify WAV correctness
     const dummyAudio = Buffer.alloc(960000, 0x01);
-    ws.send(dummyAudio);
+    socket.send(dummyAudio);
     
     await new Promise(r => setTimeout(r, 200));
     
     // 3. Stop session
-    ws.send(JSON.stringify({
+    socket.send(JSON.stringify({
       type: 'session.stop',
       session_id: sessionId
     }));
     
     await new Promise(r => setTimeout(r, 300));
-    ws.close();
+    socket.close();
     
     // Wait for DB queue / file writes to flush
     await new Promise(r => setTimeout(r, 1000));

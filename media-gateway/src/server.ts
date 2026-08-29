@@ -12,6 +12,7 @@
  */
 
 import http from 'node:http';
+import { Server, Socket as IoSocket } from 'socket.io';
 import { WebSocketServer, WebSocket } from 'ws';
 import { loadConfig, type GatewayConfig } from './config.js';
 import { parseMessage, ProtocolError } from './protocol.js';
@@ -22,7 +23,9 @@ import { CallRecorder } from './call-recorder.js';
 import { persistSessionStart, persistChunk, persistSessionStop } from './persistence.js';
 import { getLocalIpAddresses, getRecommendedLanIp } from './network.js';
 import { logger, setLogLevel } from './logger.js';
-import { handleApiRequest } from './api.js';
+import express from 'express';
+import cors from 'cors';
+import { apiRouter } from './api.js';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,123 +48,109 @@ const callIdMap = new Map<string, string>();
 
 // ── HTTP Server (health endpoint) ──────────────────────────────────
 
-const httpServer = http.createServer(async (req, res) => {
-  if (await handleApiRequest(req, res)) {
-    return;
-  }
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-  if (req.method === 'GET' && req.url === '/health') {
-    const health = {
-      status: 'ok',
-      mlConnected: mlClient.isConnected,
-      activeSessions: sessionManager.activeCount,
-      sessions: sessionManager.getSessionInfos(),
-      uptime: process.uptime(),
-      network: {
-        recommendedIp: getRecommendedLanIp(),
-        interfaces: getLocalIpAddresses(),
-        port: config.port,
-      }
-    };
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(health, null, 2));
-    return;
-  }
+// API Routes
+app.use('/api', apiRouter);
 
-  if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
-    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
-    if (fs.existsSync(indexPath)) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(fs.readFileSync(indexPath));
-      return;
+// Health endpoint
+app.get('/health', (req, res) => {
+  const health = {
+    status: 'ok',
+    mlConnected: mlClient.isConnected,
+    activeSessions: sessionManager.activeCount,
+    sessions: sessionManager.getSessionInfos(),
+    uptime: process.uptime(),
+    network: {
+      recommendedIp: getRecommendedLanIp(),
+      interfaces: getLocalIpAddresses(),
+      port: config.port,
     }
-  }
-
-  res.writeHead(404);
-  res.end('Not Found');
+  };
+  res.json(health);
 });
 
-// ── WebSocket Server (audio ingestion) ─────────────────────────────
+// Serve static files (Dashboard)
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Create HTTP server from Express app
+const httpServer = http.createServer(app);
+
+// ── Socket.IO Server (audio ingestion) ─────────────────────────────
+
+const io = new Server(httpServer, {
+  cors: { origin: '*' },
+  maxHttpBufferSize: 1e7 // 10 MB for large audio chunks if needed
+});
+
+const dashboardIo = io.of('/dashboard');
 
 const wss = new WebSocketServer({ noServer: true });
-const dashboardWss = new WebSocketServer({ noServer: true });
 
 httpServer.on('upgrade', (request, socket, head) => {
   const pathname = request.url;
-  if (pathname === '/dashboard') {
-    dashboardWss.handleUpgrade(request, socket, head, (ws) => {
-      dashboardWss.emit('connection', ws, request);
-    });
-  } else if (pathname === '/' || pathname === '') {
+  // Let Socket.IO handle its own paths natively.
+  // We explicitly catch root paths for raw websocket audio ingestion.
+  if (pathname === '/' || pathname === '') {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
-  } else {
-    socket.destroy();
   }
 });
 
-// Track which session is associated with each WebSocket connection
-const wsSessionMap = new Map<WebSocket, AudioSession>();
-const dashboardClients = new Set<WebSocket>();
+// Track which session is associated with each Socket
+const socketSessionMap = new Map<WebSocket, AudioSession>();
 
-dashboardWss.on('connection', (ws) => {
-  dashboardClients.add(ws);
-  
+dashboardIo.on('connection', (socket) => {
   // Send initial gateway state
-  ws.send(JSON.stringify({
-    type: 'gateway_state',
+  socket.emit('gateway_state', {
     status: 'ONLINE',
     network: {
       recommendedIp: getRecommendedLanIp(),
       interfaces: getLocalIpAddresses(),
       port: config.port,
     }
-  }));
-
-  ws.on('close', () => dashboardClients.delete(ws));
+  });
 });
 
 function broadcastToDashboard(msg: any) {
-  const payload = JSON.stringify(msg);
-  for (const client of dashboardClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  }
+  // Emit the message using its type as the event name for cleaner client logic
+  dashboardIo.emit(msg.type, msg);
 }
 
 wss.on('connection', (ws, req) => {
   const remoteAddr = req.socket.remoteAddress ?? 'unknown';
-  logger.info('WEBSOCKET_CONNECTED', { remote: remoteAddr });
+  logger.info('SOCKET_CONNECTED', { remote: remoteAddr });
 
-  ws.on('message', (data, isBinary) => {
+  ws.on('message', (data: Buffer, isBinary: boolean) => {
     if (isBinary) {
-      // Binary frame = PCM audio data
-      handleBinaryMessage(ws, data as Buffer);
+      // Binary frame -> audio data
+      handleBinaryMessage(ws, data);
     } else {
-      // Text frame = JSON protocol message
-      handleTextMessage(ws, data.toString());
+      // Text frame -> control message
+      handleTextMessage(ws, data.toString('utf8'));
     }
   });
 
   ws.on('close', (code, reason) => {
-    logger.info('WEBSOCKET_DISCONNECTED', { remote: remoteAddr, code, reason: reason.toString() });
+    logger.info('SOCKET_DISCONNECTED', { remote: remoteAddr, code, reason: reason.toString() });
     handleDisconnect(ws);
   });
 
   ws.on('error', (err) => {
-    logger.error('WEBSOCKET_ERROR', { remote: remoteAddr, error: err.message });
+    logger.error('SOCKET_ERROR', { remote: remoteAddr, error: err.message });
     handleDisconnect(ws);
   });
 });
 
 // ── Message handlers ───────────────────────────────────────────────
 
-function handleTextMessage(ws: WebSocket, raw: string): void {
+function handleTextMessage(ws: WebSocket, rawMsg: string | Buffer): void {
   let msg;
   try {
-    msg = parseMessage(raw);
+    msg = parseMessage(rawMsg);
   } catch (err) {
     if (err instanceof ProtocolError) {
       logger.warn('PROTOCOL_ERROR', { code: err.code, message: err.message });
@@ -174,21 +163,21 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
 
   switch (msg.type) {
     case 'session.start': {
-      // Check if this WS already has a session
-      if (wsSessionMap.has(ws)) {
-        const existing = wsSessionMap.get(ws)!;
+      // Check if this Socket already has a session
+      if (socketSessionMap.has(ws)) {
+        const existing = socketSessionMap.get(ws)!;
         logger.warn('DUPLICATE_SESSION_START', { existing: existing.sessionId, new: msg.session_id });
         ws.send(JSON.stringify({
           type: 'error',
           code: 'DUPLICATE_START',
-          message: `WebSocket already has session: ${existing.sessionId}`,
+          message: `Socket already has session: ${existing.sessionId}`,
         }));
         return;
       }
 
       try {
         const session = sessionManager.createSession(msg);
-        wsSessionMap.set(ws, session);
+        socketSessionMap.set(ws, session);
         
         const callId = randomUUID();
         callIdMap.set(session.sessionId, callId);
@@ -225,7 +214,7 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
     }
 
     case 'session.stop': {
-      const session = wsSessionMap.get(ws);
+      const session = socketSessionMap.get(ws);
       if (!session) {
         logger.warn('SESSION_NOT_FOUND', { session_id: msg.session_id, event: 'stop' });
         return;
@@ -262,7 +251,7 @@ function handleTextMessage(ws: WebSocket, raw: string): void {
       });
 
       sessionManager.removeSession(session.sessionId);
-      wsSessionMap.delete(ws);
+      socketSessionMap.delete(ws);
 
       ws.send(JSON.stringify({
         type: 'session.stopped',
@@ -287,7 +276,7 @@ function computeRMS(buffer: Buffer): number {
 }
 
 function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
-  const session = wsSessionMap.get(ws);
+  const session = socketSessionMap.get(ws);
   if (!session) {
     logger.warn('AUDIO_NO_SESSION', { bytes: data.length });
     return;
@@ -333,7 +322,7 @@ function handleBinaryMessage(ws: WebSocket, data: Buffer): void {
 }
 
 function handleDisconnect(ws: WebSocket): void {
-  const session = wsSessionMap.get(ws);
+  const session = socketSessionMap.get(ws);
   if (session) {
     logger.warn('SESSION_DISCONNECT', { session: session.sessionId, status: session.status });
 
@@ -359,7 +348,7 @@ function handleDisconnect(ws: WebSocket): void {
     });
 
     sessionManager.removeSession(session.sessionId);
-    wsSessionMap.delete(ws);
+    socketSessionMap.delete(ws);
   }
 }
 
@@ -400,6 +389,7 @@ function shutdown(): void {
   mlClient.disconnect();
   debugRecorder?.stopAll();
   callRecorder.stopAll();
+  io.close();
   wss.close();
   httpServer.close();
   process.exit(0);
@@ -409,4 +399,4 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 // Export for testing
-export { httpServer, wss, dashboardWss, sessionManager, mlClient };
+export { httpServer, io, dashboardIo, wss, sessionManager, mlClient };
