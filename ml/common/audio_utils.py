@@ -291,3 +291,29 @@ def preprocess(
     if fixed_length:
         audio = pad_or_crop(audio, cfg.segment_samples, mode=crop, rng=rng)
     return audio
+
+# --------------------------------------------------------------------------
+# Real-time pipeline helpers
+# --------------------------------------------------------------------------
+
+def pcm16_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
+    """Convert raw 16-bit PCM bytes (e.g. from a WebSocket stream) to float32 [-1, 1]."""
+    audio_i16 = np.frombuffer(pcm_bytes, dtype=np.int16)
+    return (audio_i16.astype(np.float32) / 32768.0)
+
+def chunk_audio(audio: np.ndarray, window_samples: int, hop_samples: int):
+    """Yield overlapping fixed-length windows, zero-padding the final one."""
+    n = len(audio)
+    if n == 0:
+        return
+    start = 0
+    while start < n:
+        end = start + window_samples
+        window = audio[start:end]
+        if len(window) < window_samples:
+            window = np.pad(window, (0, window_samples - len(window)))
+        yield window
+        start += hop_samples
+
+def rms_energy(audio: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(np.square(audio)) + 1e-12))

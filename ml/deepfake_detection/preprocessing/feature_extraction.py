@@ -1,50 +1,22 @@
-"""Spectral and phase feature front-ends.
+"""Spectral and phase feature front-ends, plus DSP anomaly extraction.
 
-The important one here is Modified Group Delay (MGD).
-
-Magnitude-only features — Mel, MFCC, and to a lesser degree LFCC — throw phase
-away. Neural vocoders (HiFi-GAN and relatives) reconstruct magnitude
-spectrograms convincingly but estimate phase sub-optimally, so phase is exactly
-where the artefact that survives a codec lives.
-
-MGD matters for a second reason specific to this project: it measures glottal
-phase continuity, which is a property of the human vocal apparatus rather than
-of any particular language's phonetics. That makes it a defensible route to
-robustness across Indian languages without Indic training data — and it stays
-valid if Indic data is added later, because nothing about MGD is language-tuned.
-
-All transforms are torch modules so they run on GPU inside the model's forward
-pass, not in the data loader.
+This file contains both the PyTorch modules for the Deepfake model (MGD, SpectroTemporalFeatures)
+and the numpy/librosa features for the rule-based Prosody Anomaly pipeline.
 """
-
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 import torchaudio
+import numpy as np
+import librosa
+from scipy.fftpack import dct
 
 from ml.common.constants import SAMPLE_RATE
 
+# --- Deepfake Model Features (PyTorch) --------------------------------------
 
 class ModifiedGroupDelay(nn.Module):
-    r"""Modified Group Delay Cepstral features.
-
-    Standard group delay — the negative derivative of the phase spectrum — is
-    numerically unusable on speech: it spikes wherever the magnitude spectrum
-    approaches a zero, drowning the signal in variance. The modified form
-    (Hegde et al.) fixes this by dividing by a cepstrally-smoothed magnitude
-    and applying two compression parameters:
-
-        tau(k)     = (X_R·Y_R + X_I·Y_I) / S(k)^(2·gamma)
-        tau_mod(k) = sign(tau) · |tau|^alpha
-
-    where X is the DFT of x[n], Y the DFT of n·x[n], and S the smoothed
-    magnitude. alpha and gamma in (0, 1] tame the dynamic range; the defaults
-    are the values used in the anti-spoofing literature.
-
-    A DCT then decorrelates the result into cepstral coefficients.
-    """
-
     def __init__(
         self,
         sample_rate: int = SAMPLE_RATE,
@@ -69,7 +41,6 @@ class ModifiedGroupDelay(nn.Module):
         self.register_buffer("window", torch.hann_window(win_length), persistent=False)
 
         n_freq = n_fft // 2 + 1
-        # Orthonormal DCT-II matrix, precomputed once.
         k = torch.arange(n_cep).unsqueeze(1)
         n = torch.arange(n_freq).unsqueeze(0)
         dct = torch.cos(torch.pi * k * (2 * n + 1) / (2 * n_freq))
@@ -89,23 +60,16 @@ class ModifiedGroupDelay(nn.Module):
         )
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        """waveform: (B, samples) -> (B, n_cep, frames)"""
         x = self._stft(waveform)
-
-        # Y is the DFT of n*x[n]; the ramp must be applied per analysis frame,
-        # not across the whole signal, or the group delay is meaningless.
-        frames = waveform.unfold(-1, self.win_length, self.hop_length)  # (B, T, win)
+        frames = waveform.unfold(-1, self.win_length, self.hop_length)
         ramp = torch.arange(self.win_length, device=waveform.device, dtype=waveform.dtype)
-        ramped = (frames * ramp * self.window).transpose(1, 2)          # (B, win, T)
-        y = torch.fft.rfft(ramped, n=self.n_fft, dim=1)                 # (B, freq, T)
+        ramped = (frames * ramp * self.window).transpose(1, 2)
+        y = torch.fft.rfft(ramped, n=self.n_fft, dim=1)
 
         frames_to_use = min(x.shape[-1], y.shape[-1])
         x, y = x[..., :frames_to_use], y[..., :frames_to_use]
 
         magnitude = x.abs()
-
-        # Cepstrally-smoothed magnitude S(k): the denominator that makes the
-        # group delay stable near spectral zeros.
         log_mag = torch.log(magnitude + self.eps)
         cepstrum = torch.fft.irfft(log_mag, dim=1)
         lifter = torch.zeros(cepstrum.shape[1], device=cepstrum.device, dtype=cepstrum.dtype)
@@ -120,13 +84,6 @@ class ModifiedGroupDelay(nn.Module):
 
 
 class LFCC(nn.Module):
-    """Linear-frequency cepstral coefficients.
-
-    Linear rather than mel spacing on purpose: mel spends its resolution on low
-    frequencies where speech content lives, while synthesis artefacts
-    concentrate in the high band that mel compresses away.
-    """
-
     def __init__(self, sample_rate: int = SAMPLE_RATE, n_lfcc: int = 60,
                  n_fft: int = 512, hop_length: int = 160):
         super().__init__()
@@ -142,13 +99,6 @@ class LFCC(nn.Module):
 
 
 class SpectroTemporalFeatures(nn.Module):
-    """LFCC + MGD stacked as channels, each with deltas.
-
-    Magnitude and phase fail in different ways, so a fusion of the two is more
-    robust than either — the finding the ASVspoof 5 summary reports for
-    multi-feature systems.
-    """
-
     def __init__(self, n_lfcc: int = 60, n_mgd: int = 30, use_mgd: bool = True,
                  use_lfcc: bool = True, deltas: bool = True, cmvn: bool = True):
         super().__init__()
@@ -158,11 +108,6 @@ class SpectroTemporalFeatures(nn.Module):
         self.use_lfcc = use_lfcc
         self.use_mgd = use_mgd
         self.deltas = deltas
-        # MGD lands on a much wider numeric range than LFCC (order 100 vs order
-        # 10). Concatenating them raw lets MGD dominate the first convolution by
-        # scale alone. Per-utterance CMVN puts both on equal footing and, as a
-        # bonus, removes the stationary channel component the way cepstral mean
-        # subtraction traditionally does.
         self.cmvn = cmvn
         self.lfcc = LFCC(n_lfcc=n_lfcc) if use_lfcc else None
         self.mgd = ModifiedGroupDelay(n_cep=n_mgd) if use_mgd else None
@@ -172,21 +117,17 @@ class SpectroTemporalFeatures(nn.Module):
 
     @staticmethod
     def _cmvn(features: torch.Tensor) -> torch.Tensor:
-        """Cepstral mean and variance normalisation, per utterance per coefficient."""
         mean = features.mean(dim=-1, keepdim=True)
         std = features.std(dim=-1, keepdim=True).clamp(min=1e-5)
         return (features - mean) / std
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        """waveform: (B, samples) -> (B, channels, coeffs, frames)"""
         parts = []
         if self.lfcc is not None:
             parts.append(self.lfcc(waveform))
         if self.mgd is not None:
             parts.append(self.mgd(waveform))
 
-        # LFCC and MGD can differ by a frame or two at the edges depending on
-        # padding; trim to the shorter so they stack cleanly.
         frames = min(p.shape[-1] for p in parts)
         parts = [p[..., :frames] for p in parts]
         if self.cmvn:
@@ -199,3 +140,58 @@ class SpectroTemporalFeatures(nn.Module):
         delta = torchaudio.functional.compute_deltas(features)
         ddelta = torchaudio.functional.compute_deltas(delta)
         return torch.stack([features, delta, ddelta], dim=1)
+
+
+# --- DSP Anomaly Features (Numpy) -------------------------------------------
+
+N_MFCC = 20
+N_FFT = 512
+HOP_LENGTH_NP = 160  # 10ms @ 16kHz
+N_MELS = 40
+
+def extract_mfcc(y: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)
+    delta = librosa.feature.delta(mfcc)
+    delta2 = librosa.feature.delta(mfcc, order=2)
+    stacked = np.concatenate([mfcc, delta, delta2], axis=0)
+    return np.concatenate([stacked.mean(axis=1), stacked.std(axis=1)])
+
+def extract_lfcc(y: np.ndarray, sr: int = SAMPLE_RATE, n_lfcc: int = 20) -> np.ndarray:
+    stft = np.abs(librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)) ** 2
+    linear_fb = np.linspace(0, sr / 2, stft.shape[0])
+    fb_matrix = np.eye(stft.shape[0])
+    linear_spec = fb_matrix @ stft
+    log_spec = np.log(linear_spec + 1e-10)
+    lfcc = dct(log_spec, type=2, axis=0, norm="ortho")[:n_lfcc]
+    return np.concatenate([lfcc.mean(axis=1), lfcc.std(axis=1)])
+
+def extract_cqcc(y: np.ndarray, sr: int = SAMPLE_RATE, n_bins: int = 60, n_coeff: int = 20) -> np.ndarray:
+    cqt = np.abs(librosa.cqt(y, sr=sr, n_bins=n_bins, bins_per_octave=12))
+    log_cqt = np.log(cqt + 1e-10)
+    cqcc = dct(log_cqt, type=2, axis=0, norm="ortho")[:n_coeff]
+    return np.concatenate([cqcc.mean(axis=1), cqcc.std(axis=1)])
+
+def extract_spectral(y: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)
+    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)
+    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)
+    flatness = librosa.feature.spectral_flatness(y=y, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)
+    flux = np.diff(np.abs(librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH_NP)), axis=1)
+    flux_energy = np.sqrt(np.sum(flux ** 2, axis=0) + 1e-12)
+
+    feats = [centroid, bandwidth, rolloff, flatness]
+    out = [f.mean() for f in feats] + [f.std() for f in feats]
+    out += [flux_energy.mean(), flux_energy.std()]
+    return np.array(out, dtype=np.float32)
+
+def extract_all_features(y: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
+    mfcc = extract_mfcc(y, sr)
+    lfcc_feat = extract_lfcc(y, sr)
+    cqcc = extract_cqcc(y, sr)
+    spectral = extract_spectral(y, sr)
+    return np.concatenate([mfcc, lfcc_feat, cqcc, spectral]).astype(np.float32)
+
+def rule_based_dsp_anomaly_score(feat_vec: np.ndarray, feat_mean: np.ndarray, feat_std: np.ndarray) -> float:
+    z = np.abs((feat_vec - feat_mean) / (feat_std + 1e-6))
+    score = np.tanh(z.mean() / 3.0)
+    return float(np.clip(score, 0.0, 1.0))

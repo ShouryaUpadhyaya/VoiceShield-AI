@@ -29,7 +29,11 @@ export interface Chunk {
   bytes: number;
   durationMs: number;
   timestampMs: number;
-  mlStatus?: 'SENT' | 'RESPONSE';
+  mlStatus: 'PENDING' | 'SENT' | 'OK' | 'DETECTOR_UNAVAILABLE' | 'DECODE_ERROR' | string;
+  deepfakeScore?: number;
+  latencyMs?: number;
+  anomalyScore?: number;
+  speakerMatch?: string;
 }
 
 export interface ConnectionEvent {
@@ -48,6 +52,7 @@ export interface Call {
   created_at: string;
   ended_at: string | null;
   duration_ms: number;
+  ai_likelihood_pct?: number | null;
   audio_streams?: {
     sample_rate: number;
     channels: number;

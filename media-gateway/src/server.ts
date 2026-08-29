@@ -357,6 +357,16 @@ function handleDisconnect(ws: WebSocket): void {
 // Connect to ML service (non-blocking — gateway works without ML)
 if (process.env.NODE_ENV !== 'test') {
   mlClient.connect();
+  mlClient.on('score', (msg) => {
+    if (msg.metadata?.session_id) {
+      dashboardIo.emit('ml_result', {
+        session_id: msg.metadata.session_id,
+        window_seq: msg.window_seq,
+        status: msg.status,
+        signals: msg.signals,
+      });
+    }
+  });
 
   httpServer.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {

@@ -1,143 +1,41 @@
-# VoiceShield-AI
+# VoiceShield AI
 
-Real-time voice deepfake detection for live phone calls. Captures call audio from
-Android phones, streams it through a media gateway, and analyzes it with ML models
-for deepfake detection.
+VoiceShield is an advanced real-time voice verification and deepfake detection system. It seamlessly integrates a robust Node.js media gateway, a high-performance FastAPI ML inference backend, and a modern Next.js frontend to monitor live telephony calls.
 
-## Current Status
+## Key Features
+- **Real-Time Chunking**: The media gateway intercepts raw PCM telephony streams and forwards audio chunks asynchronously.
+- **Dhwani & ECAPA Models**: Powerful PyTorch models evaluate deepfake probabilities and verify speaker enrollments.
+- **Live Dashboard**: Watch chunk processing in real-time on the Next.js frontend via WebSocket integration.
+- **PostgreSQL Persistence**: Comprehensive call records, raw chunks, and ML scores are securely saved for analysis.
 
-| Feature | Status |
-|---|---|
-| Media Gateway | ✅ Working |
-| 3-second PCM chunking | ✅ Working |
-| Synthetic audio tests | ✅ 50 tests passing |
-| Fake ML integration | ✅ Working |
-| CallVault WebSocket integration | ✅ Working |
-| Physical Android test | ✅ Verified on device |
-| Real ML integration | ⬜ Next |
-| FreeSWITCH integration | ⬜ Planned |
-| SIP end-to-end test | ⬜ Planned |
+## Setup
 
-## Development Setup
-
-### 1. Start PostgreSQL
-
-```bash
-cd media-gateway
-docker compose up -d postgres
-```
-
-### 2. Verify PostgreSQL
-
-```bash
-docker compose ps
-```
-
-### 3. Apply Prisma schema
-
-```bash
-npx prisma db push
-```
-
-### 4. Start Media Gateway
-
-```bash
-npm run dev
-```
-
-Gateway:
-http://localhost:8010
-
-### 5. Start Next.js
-
-```bash
-cd ../frontend
-npm install
-npm run dev
-```
-
-Frontend:
-http://localhost:3000
-
-### 6. Android
-
-Use the LAN IP displayed by the dashboard:
-
-```
-ws://<LAPTOP-LAN-IP>:8010
-```
-
-## Troubleshooting
-
-### Docker unavailable
-
-```bash
-docker info
-```
-If Docker daemon is not running, start Docker before: `docker compose up -d postgres`
-
-### Port 5432 occupied
-
-```bash
-ss -ltnp | grep 5432
-```
-Do not kill unrelated PostgreSQL processes automatically.
-
-### Port 8010 occupied
-
-```bash
-lsof -i :8010
-```
-If the existing Media Gateway is running, do not start another copy.
-
-### Database authentication error
-
-Verify:
-```
-DATABASE_URL
-```
-matches:
-```
-postgresql://postgres:voiceshield@localhost:15432/voiceshield
-```
-for the Docker configuration.
-
-### Frontend cannot connect
-
-Verify:
-Media Gateway: `http://localhost:8010`
-Frontend: `http://localhost:3000`
-`NEXT_PUBLIC_GATEWAY_URL` is set to `http://localhost:8010` in `frontend/.env.local`
+1. **Database & Backend**
+   ```bash
+   cd media-gateway
+   npx prisma db push
+   npx prisma generate
+   npm install
+   npm run dev
+   ```
+2. **ML Service**
+   Run the ML backend from the `backend` directory with `PYTHONPATH=..` so it can find the `ml` models. Use the PyTorch extra index to install CUDA 12.6 correctly.
+   ```bash
+   # From the VoiceShield-AI root directory
+   source .venv/bin/activate
+   pip install --extra-index-url https://download.pytorch.org/whl/cu126 -r ml/requirements-torch.txt
+   cd backend
+   PYTHONPATH=.. uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+3. **Frontend Dashboard**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
 
 ## Architecture
+See `docs/architecture_doc.md` for a comprehensive breakdown of the Media Pipeline and WebSocket interactions.
 
-```
-Android CallVault ──WebSocket PCM──▶ Media Gateway ──3-sec chunks──▶ ML Service
-                                          ▲
-FreeSWITCH (planned) ──WebSocket PCM──────┘
-```
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture.
-
-## Project Layout
-
-```
-CallVault/          Android call recording app (separate git repo)
-media-gateway/      Node.js/TypeScript audio ingestion gateway
-  src/              Gateway source (server, chunker, protocol, session, ML client)
-  tests/            Vitest test suite (50 tests)
-  public/           Dashboard HTML
-ml/                 Deepfake detection model (WavLM + LFCC/MGD fusion)
-backend/            FastAPI service
-frontend/           React + Vite UI
-docs/               Project documentation
-```
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) — system design and data flow
-- [CallVault Setup](docs/CALLVAULT.md) — Android app build, install, configure
-- [Media Gateway](docs/MEDIA_GATEWAY.md) — gateway internals, endpoints, config
-- [Protocol](docs/PROTOCOL.md) — WebSocket protocol specification
-- [Testing](docs/TESTING.md) — test suite and verification
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
+## Testing
+Unit and integration tests are available. Run `npm run test` inside `media-gateway` to execute the full suite, including Prisma persistence and mock ML clients.

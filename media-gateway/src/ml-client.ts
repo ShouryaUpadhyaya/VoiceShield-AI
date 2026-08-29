@@ -14,6 +14,9 @@ import WebSocket from 'ws';
 import type { ChunkOutput } from './chunker.js';
 import type { AudioFormat } from './session.js';
 import { logger } from './logger.js';
+import { persistMlResult } from './persistence.js';
+
+import { EventEmitter } from 'events';
 
 export interface MlChunkMetadata {
   type: 'audio.chunk';
@@ -27,7 +30,7 @@ export interface MlChunkMetadata {
   bytes: number;
 }
 
-export class MlClient {
+export class MlClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _isConnected: boolean = false;
@@ -43,6 +46,7 @@ export class MlClient {
   private sendQueue: Array<{ metadata: MlChunkMetadata; data: Buffer }> = [];
 
   constructor(url: string) {
+    super();
     this._url = url;
   }
 
@@ -73,7 +77,11 @@ export class MlClient {
     this.ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        logger.info('ML_RESPONSE', { type: msg.type, session: msg.session_id });
+        logger.info('ML_RESPONSE', { type: msg.type, session: msg.metadata?.session_id });
+        if (msg.type === 'score' && msg.metadata?.session_id) {
+          persistMlResult(msg.metadata.session_id, msg.window_seq, msg);
+          this.emit('score', msg);
+        }
       } catch {
         logger.debug('ML_RAW_RESPONSE', { size: (data as Buffer).length });
       }

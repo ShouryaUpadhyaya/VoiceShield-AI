@@ -115,6 +115,30 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       get().updateSession(msg.session_id, { status: 'COMPLETED' });
       setTimeout(() => get().removeSession(msg.session_id), 10000); // clear after 10s
     });
+
+    ioSocket.on('ml_result', (msg) => {
+      if (socket !== ioSocket) return;
+      set((state) => {
+        const existing = state.chunks[msg.session_id] || [];
+        return {
+          chunks: {
+            ...state.chunks,
+            [msg.session_id]: existing.map(c => 
+              c.sequence === msg.window_seq 
+                ? { 
+                    ...c, 
+                    mlStatus: msg.status, 
+                    deepfakeScore: msg.signals?.deepfake_probability,
+                    latencyMs: msg.inference_ms,
+                    anomalyScore: msg.signals?.prosody_analysis?.overall_prosody_risk,
+                    speakerMatch: msg.signals?.speaker_match?.status
+                  } 
+                : c
+            )
+          }
+        };
+      });
+    });
   },
 
   disconnectWebsocket: () => {
