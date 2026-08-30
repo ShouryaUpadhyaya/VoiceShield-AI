@@ -28,6 +28,7 @@ from ml.adapters import dhwani as dhwani_adapter
 from ml.adapters import deepfake as deepfake_adapter
 from ml.adapters import speaker as speaker_adapter
 from ml.adapters import prosody as prosody_adapter
+from ml.adapters import indic as indic_adapter
 
 
 def _load_all_models():
@@ -44,6 +45,11 @@ def _load_all_models():
     if not df_ok:
         logger.warning("Custom deepfake model unavailable.")
 
+    # Indic Deepfake
+    indic_ok = indic_adapter.load_indic()
+    if not indic_ok:
+        logger.warning("Indic model unavailable.")
+
     # ECAPA Speaker (PyTorch/SpeechBrain)
     speaker_ok = speaker_adapter.load_speaker()
     if not speaker_ok:
@@ -57,8 +63,9 @@ def _load_all_models():
     logger.info(
         "ML_MODELS_LOADED",
         extra={
-            "dhwani": dhwani_ok,
+        "dhwani": dhwani_ok,
             "custom_deepfake": df_ok,
+            "indic": indic_ok,
             "speaker": speaker_ok,
             "prosody": prosody_ok,
         },

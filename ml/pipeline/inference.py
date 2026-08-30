@@ -24,6 +24,7 @@ from ml.adapters import dhwani as dhwani_adapter
 from ml.adapters import deepfake as deepfake_adapter
 from ml.adapters import speaker as speaker_adapter
 from ml.adapters import prosody as prosody_adapter
+from ml.adapters import indic as indic_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,10 @@ def run_inference(
         "prosody", prosody_adapter.run, audio_16k
     )
 
+    indic_result, indic_error = _run_isolated(
+        "indic", indic_adapter.run, audio_16k
+    )
+
     speaker_result, speaker_error = _run_isolated(
         "speaker", speaker_adapter.run, audio_16k
     )
@@ -114,6 +119,8 @@ def run_inference(
         model_errors["custom_deepfake"] = deepfake_error
     if prosody_error:
         model_errors["prosody"] = prosody_error
+    if indic_error:
+        model_errors["indic"] = indic_error
     if speaker_error:
         model_errors["speaker"] = speaker_error
 
@@ -121,6 +128,7 @@ def run_inference(
         "dhwani":           dhwani_adapter.is_loaded(),
         "custom_deepfake":  deepfake_adapter.is_loaded(),
         "prosody":          prosody_adapter.is_loaded(),
+        "indic":            indic_adapter.is_loaded(),
         "speaker":          speaker_adapter.is_loaded(),
     }
 
@@ -142,6 +150,7 @@ def run_inference(
         "dhwani":               dhwani_result,
         "custom_deepfake":      deepfake_result,
         "prosody":              prosody_result,
+        "indic":                indic_result,
         "speaker_verification": speaker_result,
         "model_errors":         model_errors,
         "models_available":     models_available,

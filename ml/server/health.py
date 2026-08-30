@@ -20,6 +20,7 @@ from ml.adapters import dhwani as dhwani_adapter
 from ml.adapters import deepfake as deepfake_adapter
 from ml.adapters import speaker as speaker_adapter
 from ml.adapters import prosody as prosody_adapter
+from ml.adapters import indic as indic_adapter
 
 health_router = APIRouter()
 
@@ -52,6 +53,7 @@ async def ready():
     models = {
         "dhwani":          dhwani_adapter.is_loaded(),
         "custom_deepfake": deepfake_adapter.is_loaded(),
+        "indic":           indic_adapter.is_loaded(),
         "speaker":         speaker_adapter.is_loaded(),
         "prosody":         prosody_adapter.is_loaded(),
     }
@@ -59,6 +61,7 @@ async def ready():
     model_versions = {
         "dhwani":          dhwani_adapter.get_version(),
         "custom_deepfake": deepfake_adapter.get_version(),
+        "indic":           indic_adapter.get_version(),
         "speaker":         speaker_adapter.get_version(),
         "prosody":         prosody_adapter.get_version(),
     }

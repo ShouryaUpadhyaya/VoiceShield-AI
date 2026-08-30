@@ -19,6 +19,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from ml.server.health import health_router
+from ml.server.api import api_router
 from ml.server.websocket import handle_connection
 
 logger = logging.getLogger(__name__)
@@ -33,12 +34,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Mount health/ready routes
 app.include_router(health_router)
+app.include_router(api_router)
 
 
 @app.websocket("/")
