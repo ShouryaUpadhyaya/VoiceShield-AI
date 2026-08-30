@@ -2,13 +2,32 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fetchStats } from '@/lib/api';
-import { HardDrive, Activity, PhoneCall, Database, Clock } from 'lucide-react';
+import { HardDrive, Activity, PhoneCall, Database, Clock, Server, CheckCircle, XCircle } from 'lucide-react';
+import { useMlLabStore } from '@/stores/ml-lab-store';
+import { MlApi } from '@/lib/mlApi';
+import { useEffect, useState } from 'react';
 
 export default function System() {
   const { data: stats, isLoading, error } = useQuery({ queryKey: ['stats'], queryFn: fetchStats, refetchInterval: 5000 });
+  const { modelsStatus, setModelsStatus } = useMlLabStore();
+  const [gatewayStatus, setGatewayStatus] = useState('loading');
+  const [dbStatus, setDbStatus] = useState('loading');
+  
+  useEffect(() => {
+    MlApi.getModels().then(data => {
+      if (data.models) setModelsStatus(data.models);
+    }).catch(console.error);
+    
+    fetchStats().then(() => {
+      setGatewayStatus('online');
+      setDbStatus('online'); // If stats return, DB is usually online
+    }).catch(() => {
+      setGatewayStatus('offline');
+      setDbStatus('offline');
+    });
+  }, [setModelsStatus]);
 
-  if (isLoading) return <div className="p-8 text-slate-400">Loading system stats...</div>;
-  if (error) return <div className="p-8 text-red-400">Failed to load system stats.</div>;
+  if (isLoading && gatewayStatus === 'loading') return <div className="p-8 text-slate-400">Loading system stats...</div>;
 
   const metrics = [
     { label: 'Total Calls Processed', value: stats?.totalCalls || 0, icon: PhoneCall, color: 'text-indigo-400' },
@@ -22,7 +41,54 @@ export default function System() {
     <div className="p-8 max-w-6xl mx-auto w-full space-y-8">
       <h1 className="text-2xl font-bold">System Metrics</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 lg:col-span-1 space-y-4">
+          <h2 className="text-lg font-bold mb-4 border-b border-slate-800 pb-2">Services</h2>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Server className="w-5 h-5 text-slate-400" />
+              <span className="font-medium text-slate-200">Media Gateway</span>
+            </div>
+            {gatewayStatus === 'online' ? <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">ONLINE</span> : <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">OFFLINE</span>}
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Activity className="w-5 h-5 text-slate-400" />
+              <span className="font-medium text-slate-200">ML Service</span>
+            </div>
+            {Object.keys(modelsStatus).length > 0 ? <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">ONLINE</span> : <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">OFFLINE</span>}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Database className="w-5 h-5 text-slate-400" />
+              <span className="font-medium text-slate-200">PostgreSQL</span>
+            </div>
+            {dbStatus === 'online' ? <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">ONLINE</span> : <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">OFFLINE</span>}
+          </div>
+          
+          <div className="mt-6 pt-4 border-t border-slate-800">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">ML Models</h3>
+            <div className="space-y-2">
+              {Object.entries(modelsStatus).map(([key, stat]) => (
+                <div key={key} className="flex justify-between items-center text-sm">
+                  <span className="capitalize text-slate-300">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  <div className="flex items-center gap-1.5">
+                    {stat.status === 'ready' ? (
+                      <span className="text-emerald-400 text-xs font-semibold">READY</span>
+                    ) : (
+                      <span className="text-amber-400 text-xs font-semibold">UNAVAILABLE</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
         {metrics.map((m, i) => {
           const Icon = m.icon;
           return (
@@ -37,6 +103,7 @@ export default function System() {
             </div>
           );
         })}
+        </div>
       </div>
       
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">

@@ -5,6 +5,9 @@ import { fetchStats } from '@/lib/api';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { Activity, Copy, CheckCircle2, XCircle, Smartphone, Server, Cpu, Database, Radio, Network, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { FusionControl } from '@/components/ui/FusionControl';
+import { PipelineTest } from '@/components/ui/PipelineTest';
+import { SimulatorTest } from '@/components/ui/SimulatorTest';
 
 function StatCard({ title, value, sub }: { title: string, value: string | number, sub?: string }) {
   return (
@@ -58,8 +61,9 @@ function ArchitecturePipeline() {
   };
 
   const models = [
-    { name: 'Dhwani (Anti-Spoof)', id: 'dhwani' },
-    { name: 'Deepfake Predictor', id: 'deepfake' },
+    { name: 'Indic Detector', id: 'indic' },
+    { name: 'Dhwani', id: 'dhwani' },
+    { name: 'Custom Deepfake', id: 'custom_deepfake' },
     { name: 'Prosody Analyzer', id: 'prosody' },
     { name: 'Speaker (ECAPA)', id: 'speaker' }
   ];
@@ -124,9 +128,9 @@ function ArchitecturePipeline() {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
               {models.map(model => {
-                const s = ml?.models?.[model.id] || 'OFFLINE';
+                const s = ml?.models?.[model.id] === true ? 'OK' : ml?.models?.[model.id] === false ? 'UNAVAILABLE' : 'OFFLINE';
                 return (
                   <div key={model.id} className={`flex flex-col justify-center px-3 py-2 rounded-lg border text-xs ${getModelColor(s)}`}>
                     <div className="flex items-center gap-1.5 mb-1">
@@ -249,13 +253,31 @@ function LivePipeline() {
                       
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-400">Deepfake Prob</span>
+                          <span className="text-slate-400">AI Fusion Score</span>
                           <span className={`font-mono font-bold ${chunk.mlStatus === 'PENDING' ? 'text-amber-400 animate-pulse' : (chunk.deepfakeScore != null ? (chunk.deepfakeScore > 0.5 ? 'text-red-400' : 'text-emerald-400') : 'text-slate-500')}`}>
                             {chunk.mlStatus === 'PENDING' ? 'ANALYZING...' : (chunk.deepfakeScore != null ? `${(chunk.deepfakeScore * 100).toFixed(1)}%` : 'N/A')}
                           </span>
                         </div>
+
+                        {chunk.rawResult?.detectors?.indic && (
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-800/50">
+                            <span className="text-slate-500">Indic Score</span>
+                            <span className={`font-mono ${chunk.rawResult.detectors.indic.score != null ? (chunk.rawResult.detectors.indic.score > 0.5 ? 'text-red-400/80' : 'text-emerald-400/80') : 'text-slate-600'}`}>
+                              {chunk.rawResult.detectors.indic.score != null ? `${(chunk.rawResult.detectors.indic.score * 100).toFixed(1)}%` : 'N/A'}
+                            </span>
+                          </div>
+                        )}
                         
-                        <div className="flex justify-between items-center text-sm">
+                        {chunk.rawResult?.fusion?.weights && (
+                          <div className="flex w-full h-1.5 mt-2 rounded-full overflow-hidden bg-slate-800">
+                            <div style={{ width: `${(chunk.rawResult.fusion.weights.indic || 0) * 100}%` }} className="bg-indigo-500" title={`Indic Weight: ${(chunk.rawResult.fusion.weights.indic * 100).toFixed(0)}%`} />
+                            <div style={{ width: `${(chunk.rawResult.fusion.weights.dhwani || 0) * 100}%` }} className="bg-blue-500" title={`Dhwani Weight: ${(chunk.rawResult.fusion.weights.dhwani * 100).toFixed(0)}%`} />
+                            <div style={{ width: `${(chunk.rawResult.fusion.weights.customDeepfake || 0) * 100}%` }} className="bg-cyan-500" title={`Custom Weight: ${(chunk.rawResult.fusion.weights.customDeepfake * 100).toFixed(0)}%`} />
+                            <div style={{ width: `${(chunk.rawResult.fusion.weights.prosody || 0) * 100}%` }} className="bg-purple-500" title={`Prosody Weight: ${(chunk.rawResult.fusion.weights.prosody * 100).toFixed(0)}%`} />
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-between items-center text-sm pt-2">
                           <span className="text-slate-400">Prosody Risk</span>
                           <span className={`font-mono font-bold ${chunk.mlStatus === 'PENDING' ? 'text-amber-400 animate-pulse' : (chunk.anomalyScore !== undefined ? (chunk.anomalyScore > 0.5 ? 'text-red-400' : 'text-emerald-400') : 'text-slate-500')}`}>
                             {chunk.mlStatus === 'PENDING' ? '...' : (chunk.anomalyScore !== undefined ? `${(chunk.anomalyScore * 100).toFixed(1)}%` : 'N/A')}
@@ -355,6 +377,12 @@ export default function Overview() {
       </div>
 
       <ArchitecturePipeline />
+
+      <SimulatorTest />
+
+      <FusionControl />
+      
+      <PipelineTest />
 
       <div>
         <h2 className="text-lg font-bold mb-6">Live Media Pipeline</h2>
