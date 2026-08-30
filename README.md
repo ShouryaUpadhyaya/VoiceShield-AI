@@ -85,6 +85,18 @@ npm install
 npm run dev
 ```
 
+### 4. CallVault Android App Setup
+
+CallVault does not require Shizuku or a PC to intercept telephony audio. It establishes a local persistent privileged daemon entirely on-device by talking directly to your phone's internal Wireless Debugging port.
+
+1. Enable **Developer Options**, then **Wireless Debugging**, on your Android device.
+2. Install and open the CallVault app (see the Download section above).
+3. Follow the onboarding wizard:
+   - Grant **notifications** (required to see the pairing prompt).
+   - Complete the **one-time Wireless Debugging pairing** by entering the pairing code and port shown in your Android settings.
+   - Grant the remaining permissions (phone state, call log, contacts, battery exemption).
+4. Accept the **USB debugging** prompt when onboarding offers it. CallVault will then automatically handle keeping the necessary services alive without requiring a cable.
+
 ---
 
 ## Testing & Verification
