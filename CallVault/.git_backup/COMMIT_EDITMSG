@@ -1,0 +1,9 @@
+feat: integrate media gateway websocket streaming into daemon
+
+- Refactor WebSocketAudioSink to use OkHttp push-API (connect/sendPcm/close)
+- Inject WebSocket stream directly into DirectAudioRecorderSession captureLoop
+- Pass gatewayUrl and sessionId through IRecorderService AIDL interface
+- Add Media Gateway toggle and URL configuration in Settings UI
+- Update AndroidManifest to permit cleartext traffic
+- Fixes native handoff crash on ColorOS by using daemon fallback path
+- Adds PcmTee to support legacy handoff path if used
