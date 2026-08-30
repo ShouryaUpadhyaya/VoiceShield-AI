@@ -1,0 +1,19 @@
+{
+  "name": "voiceshield-ai-monorepo",
+  "version": "1.0.0",
+  "description": "VoiceShield AI root workspace",
+  "private": true,
+  "scripts": {
+    "setup:backend": "python3 -m venv .venv && .venv/bin/pip install -r ml/requirements.txt && .venv/bin/pip install -r ml/requirements-torch.txt && .venv/bin/pip install -r backend/requirements.txt",
+    "setup:frontend": "cd frontend && npm install",
+    "setup": "npm install concurrently -g && npm run setup:backend && npm run setup:frontend",
+    "dev:backend": "PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --app-dir backend --reload --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend",
+    "test:backend": ".venv/bin/pytest tests/unit",
+    "test": "npm run test:backend",
+    "ml:train": ".venv/bin/python -m ml.deepfake_detection.training.train --config ml/deepfake_detection/training/config.yaml"
+  }
+}

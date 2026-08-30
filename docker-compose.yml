@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+
+
+  backend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DHWANI_MODEL_PATH=/app/backend/models/dhwani/best_model.onnx
+    volumes:
+      - ./data:/app/data
+      - ./backend/models:/app/backend/models
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/frontend.Dockerfile
+    ports:
+      - "8085:80"
+    depends_on:
+      - backend

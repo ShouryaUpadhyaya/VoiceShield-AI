@@ -1,0 +1,124 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model calls {
+  id                String              @id @default(uuid())
+  session_id        String
+  source            String
+  started_at        DateTime            @default(now())
+  ended_at          DateTime?
+  duration_ms       Int?
+  status            String
+  ai_likelihood_pct Float?
+  created_at        DateTime            @default(now())
+  call_sessions     call_sessions[]
+  audio_streams     audio_streams[]
+  audio_chunks      audio_chunks[]
+  recordings        recordings[]
+  connection_events connection_events[]
+}
+
+model call_sessions {
+  id         String    @id @default(uuid())
+  call_id    String
+  session_id String
+  status     String
+  created_at DateTime  @default(now())
+  ended_at   DateTime?
+  calls      calls     @relation(fields: [call_id], references: [id])
+}
+
+model audio_streams {
+  id             String   @id @default(uuid())
+  call_id        String
+  sample_rate    Int
+  channels       Int
+  encoding       String
+  bytes_received Int
+  duration_ms    Int
+  created_at     DateTime @default(now())
+  calls          calls    @relation(fields: [call_id], references: [id])
+}
+
+model audio_chunks {
+  id                  String   @id @default(uuid())
+  call_id             String
+  sequence_number     Int
+  timestamp_ms        Int
+  duration_ms         Int
+  byte_size           Int
+  status              String
+  processing_progress String   @default("pending") // Tracks ML pipeline progress (e.g. pending, analyzing, completed)
+  created_at          DateTime @default(now())
+  calls               calls    @relation(fields: [call_id], references: [id])
+  ml_results          ml_results[]
+
+  @@unique([call_id, sequence_number])
+}
+
+model recordings {
+  id           String   @id @default(uuid())
+  call_id      String
+  storage_path String
+  format       String
+  size_bytes   Int
+  duration_ms  Int
+  created_at   DateTime @default(now())
+  calls        calls    @relation(fields: [call_id], references: [id])
+}
+
+model ml_results {
+  id               String       @id @default(uuid())
+  audio_chunk_id   String
+  model_name       String
+  model_version    String
+  result_json      Json
+  audio_chunks     audio_chunks @relation(fields: [audio_chunk_id], references: [id])
+  latency_ms       Int
+  status           String
+  is_deepfake      Boolean? // Specific column for VoiceShield deepfake detection
+  speaker_id       String?  // Specific column for ECAPA speaker verification
+  anomaly_score    Float?   // Score from dhwani
+  created_at       DateTime @default(now())
+}
+
+model connection_events {
+  id             String   @id @default(uuid())
+  call_id        String?
+  session_id     String?
+  event_type     String
+  timestamp      DateTime @default(now())
+  remote_address String?
+  details_json   Json?
+  calls          calls?   @relation(fields: [call_id], references: [id])
+}
+
+model system_events {
+  id            String   @id @default(uuid())
+  timestamp     DateTime @default(now())
+  level         String
+  event_type    String
+  session_id    String?
+  message       String
+  metadata_json Json?
+}
+
+model model_test_runs {
+  id                 String   @id @default(uuid())
+  created_at         DateTime @default(now())
+  filename           String
+  duration           Float?
+  model              String?
+  model_version      String?
+  status             String
+  latency_ms         Int?
+  result_json        Json?
+  fusion_config_json Json?
+  final_score        Float?
+  is_pipeline        Boolean  @default(false)
+}

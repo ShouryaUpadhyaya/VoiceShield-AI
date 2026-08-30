@@ -1,0 +1,7 @@
+manifest: data/metadata/train_manifest.csv
+output_model: models/dsp_xgb.json
+test_size: 0.2
+random_state: 42
+n_estimators: 300
+max_depth: 6
+learning_rate: 0.05

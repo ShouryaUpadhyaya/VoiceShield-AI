@@ -1,0 +1,52 @@
+{
+  "train": {
+    "n": 25380,
+    "bonafide": {
+      "total_s_mean": 3.389,
+      "silence_s_mean": 1.063,
+      "silence_frac_mean": 0.3128
+    },
+    "spoof": {
+      "total_s_mean": 3.43,
+      "silence_s_mean": 0.81,
+      "silence_frac_mean": 0.2329
+    },
+    "silence_only_eer": 0.3477,
+    "duration_only_eer": 0.4888,
+    "silence_s_per_attack": {
+      "A01": 0.165,
+      "A02": 1.53,
+      "A03": 0.598,
+      "A04": 0.354,
+      "A05": 1.313,
+      "A06": 0.903
+    }
+  },
+  "dev": {
+    "n": 24844,
+    "bonafide": {
+      "total_s_mean": 3.508,
+      "silence_s_mean": 1.306,
+      "silence_frac_mean": 0.3709
+    },
+    "spoof": {
+      "total_s_mean": 3.475,
+      "silence_s_mean": 0.815,
+      "silence_frac_mean": 0.2334
+    },
+    "silence_only_eer": 0.3311,
+    "duration_only_eer": 0.4816,
+    "silence_s_per_attack": {
+      "A01": 0.168,
+      "A02": 1.528,
+      "A03": 0.602,
+      "A04": 0.365,
+      "A05": 1.4,
+      "A06": 0.829
+    }
+  },
+  "verdict": [
+    "train: silence alone separates the classes at 34.8% EER \u2014 a real leak. trim_edges is required, not optional.",
+    "dev: silence alone separates the classes at 33.1% EER \u2014 a real leak. trim_edges is required, not optional."
+  ]
+}

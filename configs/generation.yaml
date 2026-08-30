@@ -1,0 +1,45 @@
+models:
+  # TTS Models (High Quality Hindi)
+  - name: mms_tts_hin
+    family: tts
+    enabled: true
+    languages:
+      - hi
+
+  # Voice Conversion Models (Simulated via distinct synthetic voice reading original transcript)
+  - name: mms_tts_hin_vc
+    family: voice_conversion
+    enabled: true
+    languages:
+      - hi
+
+  # Neural Vocoder Models (Realistic compression artifacts via Encodec -> Vocos)
+  - name: vocos_encodec
+    family: neural_vocoder
+    enabled: true
+
+difficulties:
+  easy:
+    channel_condition: clean
+    channel_processing: []
+  
+  medium:
+    channel_condition: telephone_like
+    channel_processing:
+      - bandwidth_limitation
+      - resample_8k
+      
+  hard:
+    channel_condition: realistic_voip
+    channel_processing:
+      - bandwidth_limitation
+      - codec_simulation
+      - mild_noise
+
+generation:
+  random_seed: 12345
+  variants_per_model: 1
+  output_sample_rate: 16000
+  output_format: wav
+  output_channels: 1
+  device: cuda # Fallback to cpu if not available

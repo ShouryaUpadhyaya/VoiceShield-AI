@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<document type="freeswitch/xml">
+  <section name="configuration" description="Various Configuration">
+    <configuration name="modules.conf" description="Modules">
+      <modules>
+        <load module="mod_console"/>
+        <load module="mod_logfile"/>
+        <load module="mod_sofia"/>
+        <load module="mod_dialplan_xml"/>
+        <load module="mod_commands"/>
+        <load module="mod_dptools"/>
+        <load module="mod_sndfile"/>
+        <load module="mod_audio_stream"/>
+        <load module="mod_tone_stream"/>
+        <load module="mod_event_socket"/>
+      </modules>
+    </configuration>
+
+    <configuration name="console.conf" description="Console Logger">
+      <mappings>
+        <map name="all" value="console,debug,info,notice,warning,err,crit,alert"/>
+      </mappings>
+      <settings>
+        <param name="colorize" value="true"/>
+        <param name="loglevel" value="debug"/>
+      </settings>
+    </configuration>
+
+    <configuration name="event_socket.conf" description="Socket Client">
+      <settings>
+        <param name="nat-map" value="false"/>
+        <param name="listen-ip" value="0.0.0.0"/>
+        <param name="listen-port" value="8021"/>
+        <param name="password" value="ClueCon"/>
+      </settings>
+    </configuration>
+
+    <configuration name="sofia.conf" description="Sofia Endpoint">
+      <global_settings>
+        <param name="log-level" value="0"/>
+        <param name="debug-presence" value="0"/>
+      </global_settings>
+      <profiles>
+        <profile name="internal">
+          <settings>
+            <param name="debug" value="0"/>
+            <param name="sip-trace" value="no"/>
+            <param name="context" value="public"/>
+            <param name="rfc2833-pt" value="101"/>
+            <param name="sip-port" value="5060"/>
+            <param name="dialplan" value="XML"/>
+            <param name="dtmf-duration" value="2000"/>
+            <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
+            <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
+            <param name="rtp-timer-name" value="soft"/>
+            <param name="local-network-acl" value="localnet.auto"/>
+            <param name="ext-rtp-ip" value="auto-nat"/>
+            <param name="ext-sip-ip" value="auto-nat"/>
+            <param name="rtp-ip" value="auto"/>
+            <param name="sip-ip" value="auto"/>
+          </settings>
+        </profile>
+      </profiles>
+    </configuration>
+
+    <configuration name="switch.conf" description="Core Config">
+      <settings>
+        <param name="rtp-start-port" value="16384"/>
+        <param name="rtp-end-port" value="16484"/>
+      </settings>
+    </configuration>
+  </section>
+
+  <section name="dialplan" description="Regex/XML Dialplan">
+    <context name="public">
+      <extension name="test_call">
+        <condition field="destination_number" expression="^.*$">
+          <action application="answer"/>
+          <!-- Pass metadata as JSON to mod_audio_stream -->
+          <action application="set" data="STREAM_EXTRA_HEADERS={&quot;call_id&quot;:&quot;${uuid}&quot;, &quot;caller&quot;:&quot;${caller_id_number}&quot;, &quot;callee&quot;:&quot;${destination_number}&quot;}"/>
+          <!-- Use the API command to start streaming -->
+          <!-- We evaluate it in a variable assignment -->
+          <action application="set" data="stream_res=${uuid_audio_stream(${uuid} start ws://127.0.0.1:8005/api/analyze-stream mono 16000)}"/>
+          <!-- Give the caller some audio (tone) to simulate ringing or just echo so they can test their own voice -->
+          <!-- <action application="playback" data="tone_stream://%(1000,4000,425)"/> -->
+          <action application="echo"/>
+        </condition>
+      </extension>
+    </context>
+  </section>
+</document>

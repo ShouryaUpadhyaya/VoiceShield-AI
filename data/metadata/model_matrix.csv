@@ -1,0 +1,15 @@
+model_name,generation_family,repository,license,checkpoint_license,local_inference,gpu_required,cpu_support,supported_languages,voice_cloning,voice_conversion,batch_inference,inference_speed,output_quality,maintenance,dependencies_complexity,research_use_appropriate,attribution_required
+XTTS-v2,tts,coqui-ai/TTS,CPML,CPML,true,true,true,en;hi;es;fr,true,false,false,medium,high,inactive,high,true,true
+StyleTTS2,tts,yl4579/StyleTTS2,MIT,MIT,true,true,false,en,true,false,true,fast,high,active,medium,true,false
+VITS,tts,jaywalnut310/vits,MIT,MIT,true,true,true,en;many,false,false,true,fast,medium,inactive,low,true,false
+Fish Speech,tts,fishaudio/fish-speech,CC-BY-CC-BY-SA,CC-BY-CC-BY-SA,true,true,false,en;zh;jp,true,false,true,slow,very_high,active,high,true,true
+CosyVoice,tts,FunAudioLLM/CosyVoice,Apache-2.0,Apache-2.0,true,true,false,en;zh;jp;yue;ko,true,false,true,medium,very_high,active,high,true,false
+Parler-TTS,tts,huggingface/parler-tts,Apache-2.0,Apache-2.0,true,true,true,en,false,false,true,medium,medium,active,medium,true,false
+MeloTTS,tts,myshell-ai/MeloTTS,MIT,MIT,true,true,true,en;zh;jp;kr;es;fr,false,false,true,fast,medium,active,low,true,false
+OpenVoice-v2,voice_conversion,myshell-ai/OpenVoice,MIT,MIT,true,true,true,en;zh;jp;kr;es;fr,true,true,false,medium,high,active,medium,true,false
+GPT-SoVITS,voice_conversion,RVC-Boss/GPT-SoVITS,MIT,MIT,true,true,false,en;zh;jp,true,true,true,medium,very_high,active,high,true,false
+FreeVC,voice_conversion,OlaWod/FreeVC,MIT,MIT,true,true,true,en,false,true,true,fast,medium,inactive,medium,true,false
+Seed-VC,voice_conversion,Plachtaa/seed-vc,MIT,MIT,true,true,false,en;zh,true,true,false,medium,high,active,medium,true,false
+HiFi-GAN,neural_vocoder,jik876/hifi-gan,MIT,MIT,true,true,true,universal,false,false,true,fast,high,inactive,low,true,false
+BigVGAN,neural_vocoder,NVIDIA/BigVGAN,MIT,MIT,true,true,false,universal,false,false,true,fast,very_high,active,medium,true,false
+ParallelWaveGAN,neural_vocoder,kan-bayashi/ParallelWaveGAN,MIT,MIT,true,true,true,universal,false,false,true,fast,medium,inactive,low,true,false
