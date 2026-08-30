@@ -1,143 +1,134 @@
-# VoiceShield-AI
+# VoiceShield AI
 
-Real-time voice deepfake detection for live phone calls. Captures call audio from
-Android phones, streams it through a media gateway, and analyzes it with ML models
-for deepfake detection.
+VoiceShield is an advanced real-time voice verification and deepfake detection system. It seamlessly integrates a robust Node.js media gateway, a high-performance FastAPI ML inference backend, and a modern Next.js frontend to monitor live telephony calls. By intercepting live calls and streaming audio chunks asynchronously, VoiceShield detects synthetic voices and spoofing attempts without interrupting the user.
 
-## Current Status
+## Key Features
 
-| Feature | Status |
-|---|---|
-| Media Gateway | ✅ Working |
-| 3-second PCM chunking | ✅ Working |
-| Synthetic audio tests | ✅ 50 tests passing |
-| Fake ML integration | ✅ Working |
-| CallVault WebSocket integration | ✅ Working |
-| Physical Android test | ✅ Verified on device |
-| Real ML integration | ⬜ Next |
-| FreeSWITCH integration | ⬜ Planned |
-| SIP end-to-end test | ⬜ Planned |
+- **Real-Time Chunking**: The media gateway intercepts raw PCM telephony streams from an Android device (via CallVault daemon) and forwards audio chunks (3 seconds) asynchronously to the ML pipeline.
+- **Deepfake Detection Models**: Powerful PyTorch models (Dhwani & ECAPA) evaluate deepfake probabilities and verify speaker enrollments.
+- **Live Dashboard**: Watch chunk processing, VAD, RMS Energy Waveforms, and Spectrograms in real-time on the Next.js/React frontend via WebSocket/SSE integration.
+- **PostgreSQL Persistence**: Comprehensive call records, raw chunks, and ML scores are securely saved for analysis.
+- **Android Integration**: Native integration with CallVault (privileged daemon on Android) to intercept audio streams directly at the OS level.
+- **FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
 
-## Development Setup
+---
 
-### 1. Start PostgreSQL
+## Prerequisites
+
+Before starting, make sure you have:
+- Node.js (v18+)
+- Python (3.10+)
+- PostgreSQL Database
+- Docker & Docker Compose (for Media Gateway testing with FreeSWITCH)
+
+---
+
+## Detailed Setup Instructions
+
+The system consists of three main components: Database & Media Gateway, ML Service, and the Frontend Dashboard. Follow these steps in order.
+
+### 1. Database & Media Gateway (Node.js)
+
+The Media Gateway (port 8010) receives WebSocket audio streams, chunks them, and manages session state.
 
 ```bash
 cd media-gateway
-docker compose up -d postgres
-```
 
-### 2. Verify PostgreSQL
-
-```bash
-docker compose ps
-```
-
-### 3. Apply Prisma schema
-
-```bash
+# Set up Prisma ORM
 npx prisma db push
-```
+npx prisma generate
 
-### 4. Start Media Gateway
-
-```bash
-npm run dev
-```
-
-Gateway:
-http://localhost:8010
-
-### 5. Start Next.js
-
-```bash
-cd ../frontend
+# Install dependencies
 npm install
+
+# Start the Gateway in development mode
 npm run dev
 ```
 
-Frontend:
-http://localhost:3000
+### 2. Machine Learning Service (Python / FastAPI)
 
-### 6. Android
-
-Use the LAN IP displayed by the dashboard:
-
-```
-ws://<LAPTOP-LAN-IP>:8010
-```
-
-## Troubleshooting
-
-### Docker unavailable
+The ML service (port 8000 / 8011) processes audio chunks and runs deepfake inference using PyTorch.
 
 ```bash
-docker info
-```
-If Docker daemon is not running, start Docker before: `docker compose up -d postgres`
+# From the VoiceShield-AI root directory
+python3 -m venv .venv
+source .venv/bin/activate
 
-### Port 5432 occupied
+# Install requirements with CUDA 12.6 support (if using GPU)
+pip install --extra-index-url https://download.pytorch.org/whl/cu126 -r ml/requirements-torch.txt
+
+# Start the ML Backend (ensure PYTHONPATH includes the root to locate `ml` models)
+cd backend
+PYTHONPATH=.. uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+> Note: If you have a separate ML WebSocket endpoint for inference, it typically runs on port 8011.
+
+### 3. Frontend Dashboard (Next.js)
+
+The interactive dashboard (port 3000 or 8085 depending on config) displays real-time results, visualizations, and session logs.
 
 ```bash
-ss -ltnp | grep 5432
-```
-Do not kill unrelated PostgreSQL processes automatically.
+# From the VoiceShield-AI root directory
+cd frontend
 
-### Port 8010 occupied
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+---
+
+## Testing & Verification
+
+### Unit & Integration Tests
+
+The Media Gateway includes an extensive test suite (50+ passing tests covering chunking, protocol validation, and session management).
 
 ```bash
-lsof -i :8010
-```
-If the existing Media Gateway is running, do not start another copy.
-
-### Database authentication error
-
-Verify:
-```
-DATABASE_URL
-```
-matches:
-```
-postgresql://postgres:voiceshield@localhost:15432/voiceshield
-```
-for the Docker configuration.
-
-### Frontend cannot connect
-
-Verify:
-Media Gateway: `http://localhost:8010`
-Frontend: `http://localhost:3000`
-`NEXT_PUBLIC_GATEWAY_URL` is set to `http://localhost:8010` in `frontend/.env.local`
-
-## Architecture
-
-```
-Android CallVault ──WebSocket PCM──▶ Media Gateway ──3-sec chunks──▶ ML Service
-                                          ▲
-FreeSWITCH (planned) ──WebSocket PCM──────┘
+cd media-gateway
+npm run test
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture.
+### Using the Android Simulator
 
-## Project Layout
+If you don't have a physical Android device running CallVault, you can use the built-in Android Simulator to test the complete pipeline (Android -> Gateway -> ML Server -> Database -> Frontend).
 
+The simulator streams audio over WebSockets precisely like the real Android daemon.
+
+```bash
+# From the VoiceShield-AI root directory
+source .venv/bin/activate
+
+# Stream a single specific audio file
+python tests/integration/test_android_simulator.py /path/to/audio/file.wav
+
+# Stream all files in a directory sequentially
+python tests/integration/test_android_simulator.py /path/to/audio/directory/
+
+# Run with a built-in default sample (librosa trumpet)
+python tests/integration/test_android_simulator.py
 ```
-CallVault/          Android call recording app (separate git repo)
-media-gateway/      Node.js/TypeScript audio ingestion gateway
-  src/              Gateway source (server, chunker, protocol, session, ML client)
-  tests/            Vitest test suite (50 tests)
-  public/           Dashboard HTML
-ml/                 Deepfake detection model (WavLM + LFCC/MGD fusion)
-backend/            FastAPI service
-frontend/           React + Vite UI
-docs/               Project documentation
-```
+*Note: Make sure your Media Gateway is running on port 8010 before executing the simulator.*
 
-## Documentation
+### Testing with FreeSWITCH (External/Echo Mode)
 
-- [Architecture](docs/ARCHITECTURE.md) — system design and data flow
-- [CallVault Setup](docs/CALLVAULT.md) — Android app build, install, configure
-- [Media Gateway](docs/MEDIA_GATEWAY.md) — gateway internals, endpoints, config
-- [Protocol](docs/PROTOCOL.md) — WebSocket protocol specification
-- [Testing](docs/TESTING.md) — test suite and verification
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
+You can also test the media gateway and DSP visualizations using SIP.
+
+1. Ensure the Docker containers are running (`docker-compose -f docker-compose.yml up -d`).
+2. Open a SIP Client (like Linphone) on the same Wi-Fi network.
+3. Dial `sip:test_call@<YOUR_LAPTOP_IP>:5060`.
+4. Speak into your microphone and view live RMS/Spectrogram graphs on the dashboard.
+
+---
+
+## Architecture Overview
+
+1. **Android Phone / CallVault** captures live 48kHz mono PCM16 audio.
+2. **WebSocket (ws://<laptop-IP>:8010)** streams audio to the **Media Gateway**.
+3. **Media Gateway** buffers and slices audio into precise 3-second chunks (288,000 bytes).
+4. **ML Service (ws://localhost:8011)** receives the chunks and executes PyTorch inference.
+5. **Dashboard** listens via WebSockets/SSE to visualize results and flag potential fraud instantly.
+
+For a deep dive into the architecture and dynamic SIP Trunk routing, refer to [Media Gateway Documentation](media_gateway_documentation.md) and `STATUS.md`.
