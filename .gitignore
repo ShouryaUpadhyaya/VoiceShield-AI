@@ -37,8 +37,7 @@ ml/artifacts_*.log
 data/metadata/labels.csv
 data/metadata/labels_*.csv
 
-# CallVault is a separate git repo; tracked via its own .git
-CallVault/
+# CallVault is now tracked in the main repo
 
 # Binary downloads
 *.AppImage
