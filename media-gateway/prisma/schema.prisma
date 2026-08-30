@@ -14,6 +14,7 @@ model calls {
   ended_at          DateTime?
   duration_ms       Int?
   status            String
+  ai_likelihood_pct Float?
   created_at        DateTime            @default(now())
   call_sessions     call_sessions[]
   audio_streams     audio_streams[]
@@ -45,15 +46,16 @@ model audio_streams {
 }
 
 model audio_chunks {
-  id              String   @id @default(uuid())
-  call_id         String
-  sequence_number Int
-  timestamp_ms    Int
-  duration_ms     Int
-  byte_size       Int
-  status          String
-  created_at      DateTime @default(now())
-  calls           calls    @relation(fields: [call_id], references: [id])
+  id                  String   @id @default(uuid())
+  call_id             String
+  sequence_number     Int
+  timestamp_ms        Int
+  duration_ms         Int
+  byte_size           Int
+  status              String
+  processing_progress String   @default("pending") // Tracks ML pipeline progress (e.g. pending, analyzing, completed)
+  created_at          DateTime @default(now())
+  calls               calls    @relation(fields: [call_id], references: [id])
 
   @@unique([call_id, sequence_number])
 }
@@ -70,14 +72,17 @@ model recordings {
 }
 
 model ml_results {
-  id             String   @id @default(uuid())
-  audio_chunk_id String
-  model_name     String
-  model_version  String
-  result_json    Json
-  latency_ms     Int
-  status         String
-  created_at     DateTime @default(now())
+  id               String   @id @default(uuid())
+  audio_chunk_id   String
+  model_name       String
+  model_version    String
+  result_json      Json
+  latency_ms       Int
+  status           String
+  is_deepfake      Boolean? // Specific column for VoiceShield deepfake detection
+  speaker_id       String?  // Specific column for ECAPA speaker verification
+  anomaly_score    Float?   // Score from dhwani
+  created_at       DateTime @default(now())
 }
 
 model connection_events {

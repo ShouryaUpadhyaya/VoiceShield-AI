@@ -91,13 +91,30 @@ export function persistChunk(callId: string, chunk: ChunkOutput) {
 
 export function persistSessionStop(session: AudioSession, callId: string, recordingInfo: RecordingInfo | null) {
   queueDbOperation(async () => {
+    // Calculate aggregate AI likelihood
+    const chunks = await prisma.audio_chunks.findMany({ where: { call_id: callId }, select: { id: true } });
+    const chunkIds = chunks.map(c => c.id);
+    const mlResults = await prisma.ml_results.findMany({ where: { audio_chunk_id: { in: chunkIds } } });
+    
+    let totalScore = 0;
+    let count = 0;
+    for (const res of mlResults) {
+      const json = res.result_json as any;
+      if (json?.signals?.deepfake_probability !== undefined) {
+        totalScore += json.signals.deepfake_probability;
+        count++;
+      }
+    }
+    const aiLikelihoodPct = count > 0 ? (totalScore / count) * 100 : null;
+
     // End the call
     await prisma.calls.update({
       where: { id: callId },
       data: {
         status: 'COMPLETED',
         ended_at: new Date(),
-        duration_ms: recordingInfo ? recordingInfo.durationMs : 0
+        duration_ms: recordingInfo ? recordingInfo.durationMs : 0,
+        ai_likelihood_pct: aiLikelihoodPct
       }
     });
 
@@ -132,6 +149,39 @@ export function persistSessionStop(session: AudioSession, callId: string, record
         session_id: session.sessionId,
         event_type: 'SESSION_STOP'
       }
+    });
+  });
+}
+
+export function persistMlResult(sessionId: string, seq: number, result: any) {
+  queueDbOperation(async () => {
+    const call = await prisma.calls.findFirst({ where: { session_id: sessionId } });
+    if (!call) return;
+    
+    const chunk = await prisma.audio_chunks.findUnique({
+      where: { call_id_sequence_number: { call_id: call.id, sequence_number: seq } }
+    });
+    if (!chunk) return;
+    
+    await prisma.ml_results.create({
+      data: {
+        audio_chunk_id: chunk.id,
+        model_name: result.backend || 'unknown',
+        model_version: result.schema_version ? String(result.schema_version) : '1.0',
+        result_json: result,
+        latency_ms: result.inference_ms || 0,
+        status: result.status || 'OK',
+        is_deepfake: result.signals?.deepfake_probability > 0.5,
+        speaker_id: result.signals?.speaker_match?.speaker_id || null,
+        anomaly_score: result.signals?.prosody_analysis?.overall_prosody_risk || null
+      }
+    });
+
+    logger.debug('ML_RESULT_SAVED', { session: sessionId, seq, latency: result.inference_ms });
+
+    await prisma.audio_chunks.update({
+      where: { id: chunk.id },
+      data: { processing_progress: 'completed' }
     });
   });
 }

@@ -61,7 +61,10 @@ apiRouter.get('/calls/:id', async (req, res) => {
       where: { id: callId },
       include: {
         audio_streams: true,
-        audio_chunks: { orderBy: { sequence_number: 'asc' } },
+        audio_chunks: { 
+          orderBy: { sequence_number: 'asc' },
+          include: { ml_results: true }
+        },
         recordings: true,
         connection_events: { orderBy: { timestamp: 'asc' } }
       }
