@@ -5,3 +5,6 @@ openai-whisper
 soundfile
 datasets
 librosa
+transformers
+vocos
+encodec
