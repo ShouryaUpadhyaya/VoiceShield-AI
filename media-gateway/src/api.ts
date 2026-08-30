@@ -114,3 +114,40 @@ apiRouter.get('/logs', async (req, res) => {
     res.json([]);
   }
 });
+
+apiRouter.get('/tests', async (req, res) => {
+  try {
+    const tests = await prisma.model_test_runs.findMany({
+      orderBy: { created_at: 'desc' },
+      take: 100
+    });
+    res.json(tests);
+  } catch (err) {
+    logger.error('API_ERROR', { url: req.originalUrl, error: String(err) });
+    res.status(500).json({ error: 'Internal server error', details: String(err) });
+  }
+});
+
+apiRouter.post('/tests', express.json(), async (req, res) => {
+  try {
+    const { filename, duration, model, model_version, status, latency_ms, result_json, fusion_config_json, final_score, is_pipeline } = req.body;
+    const testRun = await prisma.model_test_runs.create({
+      data: {
+        filename,
+        duration,
+        model,
+        model_version,
+        status,
+        latency_ms,
+        result_json,
+        fusion_config_json,
+        final_score,
+        is_pipeline: is_pipeline || false
+      }
+    });
+    res.json(testRun);
+  } catch (err) {
+    logger.error('API_ERROR', { url: req.originalUrl, error: String(err) });
+    res.status(500).json({ error: 'Internal server error', details: String(err) });
+  }
+});
