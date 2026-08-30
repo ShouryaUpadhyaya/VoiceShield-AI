@@ -51,3 +51,7 @@ media-gateway/debug-recordings/
 
 # Demo relay (temporary dev tool)
 demo-relay/
+
+# User added datasets
+DATA_SET_DONT_PUSH/
+data/wavs/

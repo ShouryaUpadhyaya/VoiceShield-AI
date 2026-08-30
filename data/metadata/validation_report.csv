@@ -1,0 +1,12 @@
+filepath,valid,sample_rate,channels,duration,rms,peak,corruption_status
+data/wavs/fake/easy/tts/mms_tts_hin/+91 11 2240 6603_18102022_160343_Call In__easy__tts__mms_tts_hin.wav,True,16000,1,2.672,0.1533,0.9197,OK
+data/wavs/fake/easy/tts/mms_tts_hin/+91 11 2240 6603_27092022_101541_Call In__easy__tts__mms_tts_hin.wav,True,16000,1,2.928,0.1508,0.9160,OK
+data/wavs/fake/easy/voice_conversion/mms_tts_hin_vc/+91 11 2240 6603_18102022_160343_Call In__easy__voice_conversion__mms_tts_hin_vc.wav,True,16000,1,2.704,0.1559,0.8914,OK
+data/wavs/fake/easy/voice_conversion/mms_tts_hin_vc/+91 11 2240 6603_27092022_101541_Call In__easy__voice_conversion__mms_tts_hin_vc.wav,True,16000,1,2.72,0.1489,0.9070,OK
+data/wavs/fake/easy/neural_vocoder/vocos_encodec/+91 11 2240 6603_18102022_160343_Call In__easy__neural_vocoder__vocos_encodec.wav,True,24000,1,156.04,0.0658,0.6730,OK
+data/wavs/fake/medium/tts/mms_tts_hin/+91 11 2240 6603_18102022_160343_Call In__medium__tts__mms_tts_hin.wav,True,8000,1,2.656,0.1094,0.6725,OK
+data/wavs/fake/medium/voice_conversion/mms_tts_hin_vc/+91 11 2240 6603_18102022_160343_Call In__medium__voice_conversion__mms_tts_hin_vc.wav,True,8000,1,2.736,0.1073,0.7263,OK
+data/wavs/fake/medium/neural_vocoder/vocos_encodec/+91 11 2240 6603_18102022_160343_Call In__medium__neural_vocoder__vocos_encodec.wav,True,8000,1,156.04,0.0540,0.5676,OK
+data/wavs/fake/hard/tts/mms_tts_hin/+91 11 2240 6603_18102022_160343_Call In__hard__tts__mms_tts_hin.wav,True,16000,1,2.8,0.1039,0.7043,OK
+data/wavs/fake/hard/voice_conversion/mms_tts_hin_vc/+91 11 2240 6603_18102022_160343_Call In__hard__voice_conversion__mms_tts_hin_vc.wav,True,16000,1,2.624,0.1049,0.7868,OK
+data/wavs/fake/hard/neural_vocoder/vocos_encodec/+91 11 2240 6603_18102022_160343_Call In__hard__neural_vocoder__vocos_encodec.wav,True,24000,1,156.04,0.0540,0.5848,OK

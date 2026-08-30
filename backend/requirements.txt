@@ -7,3 +7,5 @@ onnxruntime
 soundfile
 numpy
 scipy
+sse-starlette
+httpx
