@@ -9,7 +9,14 @@ VoiceShield is an advanced real-time voice verification and deepfake detection s
 - **Live Dashboard**: Watch chunk processing, VAD, RMS Energy Waveforms, and Spectrograms in real-time on the Next.js/React frontend via WebSocket/SSE integration.
 - **PostgreSQL Persistence**: Comprehensive call records, raw chunks, and ML scores are securely saved for analysis.
 - **Android Integration**: Native integration with CallVault (privileged daemon on Android) to intercept audio streams directly at the OS level.
-- **FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
+- FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
+
+---
+
+## Download CallVault (Android)
+
+You can download the latest debug build of the VoiceShield CallVault daemon for Android devices here:
+**[Download VoiceShield-CallVault-Debug.apk (v1.0.0)](https://github.com/ShouryaUpadhyaya/VoiceShield-AI/raw/main/releases/VoiceShield-CallVault-Debug.apk)**
 
 ---
 
