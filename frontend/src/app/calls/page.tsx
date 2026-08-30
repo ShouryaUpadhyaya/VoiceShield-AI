@@ -40,6 +40,7 @@ export default function CallHistory() {
               <th className="px-6 py-4 font-medium">Source</th>
               <th className="px-6 py-4 font-medium">Duration</th>
               <th className="px-6 py-4 font-medium">Audio Processed</th>
+              <th className="px-6 py-4 font-medium">AI Likelihood</th>
               <th className="px-6 py-4 font-medium">Status</th>
               <th className="px-6 py-4 font-medium text-right">Actions</th>
             </tr>
@@ -65,6 +66,13 @@ export default function CallHistory() {
                   </td>
                   <td className="px-6 py-4 font-mono text-slate-300">
                     {stream?.bytes_received ? `${(stream.bytes_received / 1024).toFixed(1)} KB` : '-'}
+                  </td>
+                  <td className="px-6 py-4 font-mono font-bold">
+                    {call.ai_likelihood_pct !== null && call.ai_likelihood_pct !== undefined ? (
+                      <span className={call.ai_likelihood_pct > 50 ? 'text-red-400' : 'text-emerald-400'}>
+                        {call.ai_likelihood_pct.toFixed(1)}%
+                      </span>
+                    ) : '-'}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded text-xs border uppercase ${call.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
