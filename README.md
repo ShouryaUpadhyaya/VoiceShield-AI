@@ -64,11 +64,14 @@ source .venv/bin/activate
 # Install requirements with CUDA 12.6 support (if using GPU)
 pip install --extra-index-url https://download.pytorch.org/whl/cu126 -r ml/requirements-torch.txt
 
-# Start the ML Backend (ensure PYTHONPATH includes the root to locate `ml` models)
-cd backend
-PYTHONPATH=.. uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Start the Real-Time ML Engine (Runs on port 8011)
+# IMPORTANT: You MUST run this from the root VoiceShield-AI directory!
+python -m ml.server.main
+
+# (Optional) Start the legacy REST Backend (Runs on port 8000)
+# cd backend
+# PYTHONPATH=.. uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-> Note: If you have a separate ML WebSocket endpoint for inference, it typically runs on port 8011.
 
 ### 3. Frontend Dashboard (Next.js)
 
