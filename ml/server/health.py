@@ -66,8 +66,12 @@ async def ready():
         "prosody":         prosody_adapter.get_version(),
     }
 
-    any_loaded = any(models.values())
-    status = "ready" if any_loaded else "no_models"
+    from ml.pipeline.fusion import get_weights
+    weights = get_weights()
+    key_map = {"customDeepfake": "custom_deepfake"}
+    required = [key_map.get(k, k) for k, w in weights.items() if w > 0]
+    any_loaded = any(models[k] for k in required)
+    status = "ready" if all(models[k] for k in required) else "degraded" if any_loaded else "no_detectors"
 
     return JSONResponse(
         status_code=200 if any_loaded else 503,
@@ -76,6 +80,8 @@ async def ready():
             "device": _detect_device(),
             "models": models,
             "model_versions": model_versions,
+            "required_detectors": required,
+            "calibrated": False,
             "uptime_s": round(time.time() - _startup_time, 1),
         },
     )

@@ -20,7 +20,7 @@ import { SessionManager, type AudioSession } from './session.js';
 import { MlClient } from './ml-client.js';
 import { DebugRecorder } from './debug-recorder.js';
 import { CallRecorder } from './call-recorder.js';
-import { persistSessionStart, persistChunk, persistSessionStop } from './persistence.js';
+import { persistSessionStart, persistChunk, persistSessionStop, auditOutbox } from './persistence.js';
 import { getLocalIpAddresses, getRecommendedLanIp } from './network.js';
 import { logger, setLogLevel } from './logger.js';
 import express from 'express';
@@ -39,6 +39,7 @@ const __dirname = path.dirname(__filename);
 
 const config = loadConfig();
 setLogLevel(config.logLevel);
+auditOutbox.start();
 
 const sessionManager = new SessionManager(config.chunkDurationSec);
 const mlClient = new MlClient(config.mlWsUrl);
@@ -399,6 +400,7 @@ function shutdown(): void {
   mlClient.disconnect();
   debugRecorder?.stopAll();
   callRecorder.stopAll();
+  auditOutbox.stop();
   io.close();
   wss.close();
   httpServer.close();

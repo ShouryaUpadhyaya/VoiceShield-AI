@@ -54,3 +54,11 @@ demo-relay/
 # User added datasets
 DATA_SET_DONT_PUSH/
 data/wavs/
+
+# model weights are provisioned out-of-band, not tracked (no LFS here)
+ml/deepfake_detection/indic/frozen/*.pth
+
+# Downloaded ECAPA metadata/cache; provision with the documented model download.
+models/ecapa/label_encoder.txt
+models/ecapa/.cache/
+:memory:.ses

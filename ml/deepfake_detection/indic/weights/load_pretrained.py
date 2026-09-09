@@ -103,9 +103,7 @@ def load_config(path: Path | str = DEFAULT_CONFIG) -> dict:
 def build_model(config: dict | None = None, device: str = "cpu"):
     """Construct RawNet without letting __init__ mutate the caller's config."""
     # Works whether this is imported as a package or run as a script from weights/.
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
-    from model import RawNet
+    from ml.deepfake_detection.indic.model import RawNet
 
     cfg = load_config() if config is None else copy.deepcopy(config)
     return RawNet(cfg, device)

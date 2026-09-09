@@ -1,33 +1,45 @@
-# ML Fusion System
+# ML evidence and fusion policy
 
-VoiceShield-AI determines the likelihood that an audio chunk is AI-generated (spoofed/deepfake) by aggregating the predictions from multiple distinct ML models into a single, unified "AI Likelihood Score".
+The active policy is `sih-evidence-v1`. Its 0–100 result is **synthetic-audio evidence**, not a calibrated probability of fraud. See [the full model audit](research/SIH_MODEL_AUDIT.md) and [demo runbook](SIH_DEMO.md).
 
-## Weighted Mean Strategy
+## Default configuration
 
-To combine the outputs, we use a **Weighted Mean** strategy. Each model outputs a synthetic probability score `[0, 1]`, which is multiplied by a predefined weight. The sum of these products yields the final fusion score.
+| Model | Weight | Role |
+|---|---:|---|
+| Indic iv15 | 1.0 | Provisional primary detector |
+| Dhwani | 0.0 | Diagnostic comparison |
+| Custom WavLM + LFCC/MGD | 0.0 | Diagnostic comparison |
+| Prosody | 0.0 | Acoustic supporting evidence |
+| ECAPA | Not a fusion input | Enrollment-gallery similarity |
 
-The default weights are configured to prioritize detection in Indic-language scenarios, while still falling back on general-purpose models for robustness:
+iv15 is the strongest integrated candidate on historical development EER (4.02%, versus 4.46% for the original ensemble and 9.83% for the equal detector average). This selection is provisional for live chunks and does not establish external generalization. All adapters still run so their outputs remain available. Stage A and Spectra are promising research candidates, not integrated models.
 
-| Detector | Default Weight | Environment Variable | Rationale |
-|----------|----------------|----------------------|-----------|
-| **Indic** | 0.45 (45%) | `FUSION_INDIC_WEIGHT` | Highest priority. Specifically tuned for Indian accents, regional languages, and local scam tactics. |
-| **Dhwani** | 0.20 (20%) | `FUSION_DHWANI_WEIGHT` | General-purpose anti-spoofing based on well-established open-source architectures. |
-| **Custom** | 0.20 (20%) | `FUSION_CUSTOM_WEIGHT` | A secondary deepfake classifier that acts as a strong generalized fallback. |
-| **Prosody** | 0.15 (15%) | `FUSION_PROSODY_WEIGHT` | Analyzes acoustic anomalies (pitch, jitter, shimmer). Since it is not purely spectral, it provides a complementary signal but gets lower weight. |
+The old 0.45/0.20/0.20/0.15 defaults are retired. Prosody is a heuristic, not a comparable synthetic probability; nonzero prosody weights are rejected.
 
-## Handling Missing or Failed Models
+## Calculation and abstention
 
-In a microservice architecture, it is common for a specific model to fail—whether due to missing weights at startup, an out-of-memory error during inference, or simply because it was disabled by the operator.
+For explicitly enabled detectors that produce finite values in [0,1], the index is:
 
-The fusion layer employs a **dynamic weight re-normalization** policy:
-1. It identifies which models successfully returned a score for the current chunk.
-2. It gathers the raw weights of only the available models.
-3. It divides each available model's weight by the sum of the available weights, yielding a new set of normalized weights that perfectly sum to 1.0 (100%).
-4. It calculates the final score using these normalized weights.
+`100 × sum(score_i × weight_i) / sum(available positive weights)`
 
-This prevents the overall score from artificially deflating (e.g., scoring a 0.0 just because a model crashed). If *no* models are available, the fusion system returns `None` (null) for the deepfake probability.
+Zero-weight detectors do not become fallback scorers. Under the default profile, missing iv15 means **unknown**, even if Dhwani or prosody loaded. Manual experimental detector weights can be set through `PUT /api/config/fusion`; send all four numeric weights summing to one, with prosody zero. Changes are process-local and are not learned/calibrated weights.
 
-## Call-Level Pooling
+Each response exposes effective weights, contributions, configured weights and detector status. The new `risk` document includes score, reasons, recommended action and `calibrated: false`. The older `signals.deepfake_probability` field is retained for wire compatibility but has the same **uncalibrated evidence-score** semantics.
 
-The fusion score is calculated **per 3-second chunk** within the Python ML service. 
-The Node.js Media Gateway consumes these chunk-level fusion scores and aggregates them across the entire duration of the call (currently using a simple mean) to assign the final `ai_likelihood_pct` stored in the database.
+Silence, DC, nonfinite/malformed input, <1 second or insufficient active audio produce null, never “safe”. The gate is not a VAD. Clipping, missing enabled detectors or a ≥0.5 spread between diagnostic detector scores trigger review. Prosody is excluded from disagreement calculations.
+
+Bands below 40 / 40–75 / ≥75 are provisional display rules; they are not the raw model's decision threshold and do not authorize blocking. No score verifies speaker identity or excludes a human-voiced scam.
+
+## Window and call behavior
+
+Live audio uses three-second chunks. The final partial chunk retains its observed duration; padding is not counted as speech. Uploads up to 60 seconds run the same windows and return all results, their valid-window mean and peak, coverage and review reasons. The gateway stores a valid-window mean, excluding null/nonfinite scores and refreshing it when late results arrive.
+
+`GET /api/calls/:id` also exposes `risk_summary` with mean, peak and unscored-window counts. The dashboard's live mean uses only its last 20 retained chunks and is labeled accordingly.
+
+A mean can conceal a short suspicious segment. Neither mean, max, noisy-OR nor p90 pooling is a calibrated call probability without separate evaluation. Inspect the timeline and peak and validate a call-level operating point before using it for alerts.
+
+## Serving contract
+
+Startup resolves explicit checkpoint overrides strictly and pins default architecture paths. Model versions identify the loaded artifacts. FastAPI lifespan loads models for both `python -m ml.server.main` and `uvicorn ml.server.app:app`. `/ready` requires a scoring detector; a prosody-only process returns 503. Use one process/worker on limited memory.
+
+The older `backend/app` scoring routes have a different policy and placeholder context/demo behavior. They are not part of this validated gateway demo. Use port 8011 and the runbook.

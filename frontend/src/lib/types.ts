@@ -30,7 +30,12 @@ export interface Chunk {
   durationMs: number;
   timestampMs: number;
   mlStatus: 'PENDING' | 'SENT' | 'OK' | 'DETECTOR_UNAVAILABLE' | 'DECODE_ERROR' | string;
-  deepfakeScore?: number;
+  deepfakeScore?: number | null;
+  rawResult?: {
+    detectors?: Record<string, { score: number | null; status?: string }>;
+    fusion?: { weights: Record<string, number>; calibrated?: boolean } | null;
+    risk?: { score: number | null; status: string; reasons: string[] };
+  };
   latencyMs?: number;
   anomalyScore?: number;
   speakerMatch?: string;

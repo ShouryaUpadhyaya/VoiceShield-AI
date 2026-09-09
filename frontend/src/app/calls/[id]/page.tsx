@@ -1,11 +1,11 @@
 "use client";
 
 import { useQuery } from '@tanstack/react-query';
-import { fetchCallDetails, getRecordingUrl } from '@/lib/api';
+import { fetchAudit, fetchCallDetails, getRecordingUrl, verifyIntegrity } from '@/lib/api';
 import { useParams } from 'next/navigation';
-import { Download, PlayCircle, ArrowLeft, Clock, FileAudio, Server } from 'lucide-react';
+import { Download, PlayCircle, ArrowLeft, Clock, FileAudio, Server, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { use } from 'react';
+import { use, useState } from 'react';
 
 export default function CallDetail({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -16,6 +16,8 @@ export default function CallDetail({ params }: { params: Promise<{ id: string }>
     queryFn: () => fetchCallDetails(id),
     retry: false
   });
+  const { data: audit, refetch: refetchAudit } = useQuery({ queryKey: ['audit', id], queryFn: () => fetchAudit(id), retry: false });
+  const [verification, setVerification] = useState<any>(null);
 
   if (isLoading) return <div className="p-8 text-slate-400">Loading call details...</div>;
   if (error || !call) return <div className="p-8 text-red-400">Call not found or database offline.</div>;
@@ -128,6 +130,22 @@ export default function CallDetail({ params }: { params: Promise<{ id: string }>
           <p>No WAV recording available for this call.</p>
         </div>
       )}
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" /> Audit Integrity
+            </h2>
+            <p className="text-xs text-slate-500 mt-2">AI estimates whether audio is likely synthetic. This check only verifies whether the stored evidence and recorded result changed after anchoring.</p>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${audit?.state === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : audit?.state === 'MISMATCH' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{audit?.state === 'VERIFIED' ? 'BLOCKCHAIN VERIFIED' : audit?.state ?? 'NOT ANCHORED'}</span>
+        </div>
+        {audit?.evidence_hash && <div className="text-xs font-mono text-slate-400 break-all">Evidence hash: {audit.evidence_hash}</div>}
+        {audit?.transaction_hash && <div className="text-xs font-mono text-slate-400 break-all">Transaction: {audit.transaction_hash} · Block {audit.block_number} · {audit.blockchain_network}</div>}
+        <button className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium" onClick={async () => { setVerification(await verifyIntegrity(id)); await refetchAudit(); }}>Verify Integrity</button>
+        {verification && <div className={`text-sm ${verification.verified ? 'text-emerald-400' : 'text-red-400'}`}>{verification.verified ? '✓ Blockchain Verified: current evidence matches the anchored record.' : `✗ Integrity check failed: ${verification.status}`}</div>}
+      </div>
     </div>
   );
 }

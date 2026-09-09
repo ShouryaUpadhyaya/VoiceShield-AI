@@ -57,3 +57,13 @@ def test_decode_gateway_chunk_empty():
     """Empty payload should raise AudioDecodeError."""
     with pytest.raises(AudioDecodeError, match="Empty PCM payload"):
         decode_gateway_chunk(b"")
+
+
+def test_partial_gateway_chunk_does_not_count_padding_as_observed_audio():
+    from ml.server.websocket import _infer_sync
+    from ml.server.protocol import ChunkMetadata
+    payload = (np.sin(np.arange(28800) * .03) * 1000).astype('<i2').tobytes()
+    meta = ChunkMetadata('audio.chunk', 'partial', 0, 0, 600, 48000, 1, 'pcm_s16le', len(payload))
+    response = _infer_sync(meta, payload)
+    assert response['audio']['duration_ms'] == 600
+    assert response['risk']['score'] is None
