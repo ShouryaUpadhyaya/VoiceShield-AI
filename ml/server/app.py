@@ -14,6 +14,8 @@ Which resolves to ws://localhost:8011/
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,11 +26,23 @@ from ml.server.websocket import handle_connection
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app):
+    from dotenv import load_dotenv
+    from ml.server.main import _load_all_models
+    from ml.pipeline.fusion import get_weights
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    get_weights()  # Invalid configuration fails startup instead of corrupting scores.
+    _load_all_models()
+    yield
+
 app = FastAPI(
     title="VoiceShield ML Service",
     description="Real-time deepfake detection, prosody analysis, and speaker verification.",
     version="1.0.0",
     docs_url="/docs",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

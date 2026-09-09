@@ -129,6 +129,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
                     ...c, 
                     mlStatus: msg.status, 
                     deepfakeScore: msg.signals?.deepfake_probability,
+                    rawResult: msg,
                     latencyMs: msg.inference_ms,
                     anomalyScore: msg.signals?.prosody_analysis?.overall_prosody_risk,
                     speakerMatch: msg.signals?.speaker_match?.status

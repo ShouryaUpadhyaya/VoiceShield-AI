@@ -29,6 +29,7 @@ interface Props {
 
 export interface SessionPlayerHandle {
   seek: (sequence: number) => void;
+  play: (sequence: number) => void;
 }
 
 export const SessionPlayer = forwardRef<SessionPlayerHandle, Props>(function SessionPlayer(
@@ -75,7 +76,11 @@ export const SessionPlayer = forwardRef<SessionPlayerHandle, Props>(function Ses
     onActiveChange(seq);
   };
   // the parent's chunk cards seek through this handle
-  useImperativeHandle(ref, () => ({ seek: seekTo }), [chunkMs, chunks]);
+  const playChunk = (seq: number) => {
+    seekTo(seq);
+    void audioRef.current?.play();
+  };
+  useImperativeHandle(ref, () => ({ seek: seekTo, play: playChunk }), [chunkMs, chunks]);
 
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;

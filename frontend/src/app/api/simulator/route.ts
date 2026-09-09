@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
 export async function POST(req: Request) {
-  return new Promise(async (resolve) => {
+  return new Promise<NextResponse>(async (resolve) => {
     let body = {};
     try {
       body = await req.json();
@@ -26,16 +26,15 @@ export async function POST(req: Request) {
     ];
     const venvPython = venvCandidates.find((p) => fs.existsSync(p)) ?? venvCandidates[0];
     
-    let args = [];
-    if (targetPath) args.push(`"${targetPath}"`);
-    args.push(`-c ${concurrency}`);
-    args.push(`-s ${speed}`);
-
-    const argsString = args.join(' ');
-    
-    const cmd = `if [ -f "${venvPython}" ]; then ${venvPython} tests/integration/test_android_simulator.py ${argsString}; else python tests/integration/test_android_simulator.py ${argsString}; fi`;
-    
-    exec(cmd, { cwd: rootDir }, (error, stdout, stderr) => {
+    if (typeof targetPath !== 'string' || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4 || typeof speed !== 'number' || !Number.isFinite(speed) || speed <= 0 || speed > 10) {
+      resolve(NextResponse.json({ success: false, error: 'Invalid simulator arguments' }, { status: 400 }));
+      return;
+    }
+    const args = ['tests/integration/test_android_simulator.py'];
+    if (targetPath) args.push(path.resolve(rootDir, targetPath));
+    args.push('-c', String(concurrency), '-s', String(speed));
+    const executable = fs.existsSync(venvPython) ? venvPython : 'python';
+    execFile(executable, args, { cwd: rootDir }, (error, stdout, stderr) => {
       if (error) {
         resolve(NextResponse.json({ success: false, output: stdout, error: stderr || error.message }, { status: 500 }));
         return;

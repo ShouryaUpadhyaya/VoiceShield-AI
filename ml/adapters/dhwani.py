@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import time
+import os
 from pathlib import Path
 
 import numpy as np
@@ -50,7 +51,13 @@ def load_dhwani(model_path: str | Path | None = None) -> bool:
         from ml.deepfake_detection.inference.dhwani_detector import DhwaniDetector
         from ml.common.constants import MODEL_PATHS
 
-        path = Path(model_path or MODEL_PATHS["dhwani_onnx"])
+        from ml.common.constants import REPO_ROOT
+        explicit = model_path or os.getenv("DHWANI_MODEL_PATH")
+        candidates = [Path(explicit)] if explicit else [
+            REPO_ROOT / "data/external_models/dhwani/best_model.onnx",
+            Path(MODEL_PATHS["dhwani_onnx"]),
+        ]
+        path = next((p for p in candidates if p.is_file()), candidates[0])
 
         if not path.exists():
             logger.warning(
@@ -73,7 +80,10 @@ def load_dhwani(model_path: str | Path | None = None) -> bool:
             return False
 
         _detector = DhwaniDetector(model_path=str(path))
-        _model_version = path.name
+        import hashlib
+        with path.open("rb") as stream:
+            fingerprint = hashlib.file_digest(stream, "sha256").hexdigest()
+        _model_version = f"{path.name}@{fingerprint[:12]}"
         logger.info("DHWANI_LOADED", extra={"path": str(path)})
         return True
 

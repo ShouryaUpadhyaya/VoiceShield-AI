@@ -55,7 +55,7 @@ def load_speaker(savedir: str | None = None) -> bool:
     _load_attempted = True
 
     try:
-        from ml.common.constants import MODEL_PATHS
+        from ml.common.constants import MODEL_PATHS, REPO_ROOT
         from ml.speaker_verification.embeddings.embedding_extractor import EcapaEmbedder
 
         _savedir = savedir or MODEL_PATHS.get("ecapa_savedir", "models/ecapa")
@@ -65,12 +65,14 @@ def load_speaker(savedir: str | None = None) -> bool:
         logger.info("SPEAKER_LOADED", extra={"savedir": _savedir})
 
         # Try to load enrollment database if present
-        enroll_path = Path("models/enrolled_speakers.npz")
+        enroll_path = REPO_ROOT / "models/enrolled_speakers.npz"
         if enroll_path.exists() and enroll_path.stat().st_size > 100:
             try:
-                data = np.load(enroll_path, allow_pickle=False)
-                _enrolled_speakers = {k: data[k] for k in data.files}
-                logger.info("ENROLLMENT_LOADED", extra={"speakers": list(_enrolled_speakers.keys())})
+                with np.load(enroll_path, allow_pickle=False) as data:
+                    _enrolled_speakers = {k: data[k] for k in data.files
+                                          if data[k].shape == (192,) and np.isfinite(data[k]).all()
+                                          and np.linalg.norm(data[k]) > 0}
+                logger.info("ENROLLMENT_LOADED", extra={"speaker_count": len(_enrolled_speakers)})
             except Exception as e:
                 logger.warning("ENROLLMENT_LOAD_FAILED", extra={"error": str(e)})
 
@@ -140,6 +142,10 @@ def run(audio_16k: np.ndarray) -> dict | None:
             "embedding_dimension": int(embedding.shape[0]),
             "latency_ms": round(latency_ms, 2),
             "model_version": _model_version,
+            "comparison": "gallery_identification",
+            "identity_verified": False,
+            "decision_threshold": SPEAKER_MATCH_THRESHOLD,
+            "calibrated": False,
         }
 
         # Attempt enrollment comparison if database is loaded

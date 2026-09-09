@@ -47,10 +47,9 @@ def load_indic() -> bool:
         here = Path(__file__).parent.parent
         frozen = here / "deepfake_detection" / "indic" / "frozen"
         env = os.getenv("VOICESHIELD_INDIC_CHECKPOINT")
-        candidates = ([Path(env)] if env else []) + [
+        candidates = [Path(env)] if env else [
             frozen / "voiceshield-indic-iv15.pth",
             frozen / "best_model.pth",
-            frozen / "voiceshield-indic-v0.1.pth",      # superseded; see above
         ]
         ckpt_path = next((c for c in candidates if c.exists() and c.stat().st_size >= 1024), None)
 
@@ -131,6 +130,9 @@ def run(audio_16k: np.ndarray) -> dict | None:
             "genuine_probability":   result.real_probability,
             "latency_ms":            round(latency_ms, 2),
             "model_version":         _model_version,
+            "decision_threshold":    result.threshold,
+            "verdict":               result.verdict,
+            "windows_scored":        result.windows_scored,
         }
     except Exception as exc:
         logger.error("INDIC_INFERENCE_ERROR", extra={"error": str(exc)})

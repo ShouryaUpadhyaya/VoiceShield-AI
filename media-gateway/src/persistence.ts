@@ -5,12 +5,15 @@ import { logger } from './logger.js';
 import type { AudioSession } from './session.js';
 import type { RecordingInfo } from './call-recorder.js';
 import type { ChunkOutput } from './chunker.js';
+import { summarizeRisk } from './risk-summary.js';
+import { AuditOutbox } from './audit/outbox.js';
 
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 
 export const prisma = new PrismaClient({ adapter });
+export const auditOutbox = new AuditOutbox(prisma);
 
 // In-memory queue to ensure DB operations don't block audio loop
 const eventQueue: (() => Promise<void>)[] = [];
@@ -96,16 +99,7 @@ export function persistSessionStop(session: AudioSession, callId: string, record
     const chunkIds = chunks.map(c => c.id);
     const mlResults = await prisma.ml_results.findMany({ where: { audio_chunk_id: { in: chunkIds } } });
     
-    let totalScore = 0;
-    let count = 0;
-    for (const res of mlResults) {
-      const json = res.result_json as any;
-      if (json?.signals?.deepfake_probability !== undefined) {
-        totalScore += json.signals.deepfake_probability;
-        count++;
-      }
-    }
-    const aiLikelihoodPct = count > 0 ? (totalScore / count) * 100 : null;
+    const aiLikelihoodPct = summarizeRisk(mlResults.map(r => r.result_json)).meanPct;
 
     // End the call
     await prisma.calls.update({
@@ -141,6 +135,14 @@ export function persistSessionStop(session: AudioSession, callId: string, record
           duration_ms: recordingInfo.durationMs
         }
       });
+      // Outbox work is deliberately detached from audio persistence/inference.
+      if (process.env.NODE_ENV !== 'test') {
+        void auditOutbox.createForCompletedCall(callId, recordingInfo, {
+          sampleRate: session.format.sampleRate,
+          channels: session.format.channels,
+          encoding: session.format.encoding,
+        });
+      }
     }
 
     await prisma.connection_events.create({
@@ -173,7 +175,7 @@ export function persistMlResult(sessionId: string, seq: number, result: any) {
         status: result.status || 'OK',
         is_deepfake: result.signals?.deepfake_probability > 0.5,
         speaker_id: result.signals?.speaker_match?.speaker_id || null,
-        anomaly_score: result.signals?.prosody_analysis?.overall_prosody_risk || null
+        anomaly_score: result.signals?.prosody_analysis?.overall_prosody_risk ?? null
       }
     });
 
@@ -183,5 +185,14 @@ export function persistMlResult(sessionId: string, seq: number, result: any) {
       where: { id: chunk.id },
       data: { processing_progress: 'completed' }
     });
+
+    // ML may finish after session.stop. Refresh the final mean when late scores arrive.
+    if (call.status === 'COMPLETED') {
+      const chunks = await prisma.audio_chunks.findMany({ where: { call_id: call.id }, select: { id: true } });
+      const results = await prisma.ml_results.findMany({ where: { audio_chunk_id: { in: chunks.map(c => c.id) } } });
+      await prisma.calls.update({ where: { id: call.id }, data: {
+        ai_likelihood_pct: summarizeRisk(results.map(r => r.result_json)).meanPct
+      } });
+    }
   });
 }

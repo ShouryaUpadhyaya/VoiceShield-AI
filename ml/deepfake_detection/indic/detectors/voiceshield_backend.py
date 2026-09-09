@@ -25,10 +25,7 @@ class VoiceShieldDetector:
 
     def __init__(self, checkpoint: str | Path, device: str | None = None,
                  normalise: bool = True):
-        import sys
-        if str(REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(REPO_ROOT))
-        from weights.load_pretrained import build_model
+        from ml.deepfake_detection.indic.weights.load_pretrained import build_model
 
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = Path(checkpoint)
@@ -57,10 +54,7 @@ class VoiceShieldDetector:
         self.version = f"{self.checkpoint.stem}@{self.sha256[:12]}"
 
     def predict(self, audio_16k_mono: np.ndarray) -> DetectionResult:
-        import sys
-        if str(REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(REPO_ROOT))
-        from audio_utils import pad, peak_normalise, trim_silence
+        from ml.deepfake_detection.indic.audio_utils import pad, peak_normalise, trim_silence
 
         y = np.asarray(audio_16k_mono, dtype=np.float32)
         seconds = len(y) / SAMPLE_RATE

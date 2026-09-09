@@ -218,6 +218,9 @@ def _infer_sync(meta: ChunkMetadata, pcm_bytes: bytes) -> dict:
         pcm_bytes,
         src_sr=meta.sample_rate,
     )
+    # Padding is a model detail, not observed speech or elapsed call time.
+    observed_samples = round(len(pcm_bytes) / (2 * meta.channels) * 16000 / meta.sample_rate)
+    audio_16k = audio_16k[:observed_samples]
 
     # Run all adapters
     inference_result = run_inference(audio_16k, meta.session_id, meta.sequence)

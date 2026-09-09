@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fetchStats } from '@/lib/api';
+import { rankChunksByAiScore } from '@/lib/chunk-ranking';
 import { useGatewayStore } from '@/stores/gateway-store';
 import { Activity, Copy, CheckCircle2, XCircle, Smartphone, Server, Cpu, Database, Radio, Network, ArrowRight } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
@@ -159,6 +160,8 @@ function ArchitecturePipeline() {
 }
 
 function LivePipeline() {
+  const playerRefs = useRef<Record<string, SessionPlayerHandle | null>>({});
+  const [activeChunk, setActiveChunk] = useState<Record<string, number | null>>({});
   const sessionsMap = useGatewayStore(s => s.sessions);
   const sessions = Object.values(sessionsMap);
   const chunks = useGatewayStore(s => s.chunks);
@@ -178,9 +181,10 @@ function LivePipeline() {
     <div className="space-y-8">
       {sessions.map(session => {
         const sessionChunks = chunks[session.sessionId] || [];
+        const rankedChunks = rankChunksByAiScore(sessionChunks);
         const bufferPct = session.chunkBytes > 0 ? (session.bufferedBytes / session.chunkBytes) * 100 : 0;
         
-        const deepfakeScores = sessionChunks.map(c => c.deepfakeScore).filter(s => s !== undefined) as number[];
+        const deepfakeScores = sessionChunks.map(c => c.deepfakeScore).filter((s): s is number => typeof s === 'number' && Number.isFinite(s));
         const aiLikelihood = deepfakeScores.length > 0 ? (deepfakeScores.reduce((a,b) => a+b, 0) / deepfakeScores.length) * 100 : null;
         
         const isSuspicious = aiLikelihood !== null && aiLikelihood > 50;
@@ -230,16 +234,17 @@ function LivePipeline() {
                   </div>
 
                   <div className={`border rounded-xl p-4 min-w-[160px] transition-colors duration-500 ${aiLikelihood !== null ? (isSuspicious ? 'bg-red-950/40 border-red-900/50' : 'bg-emerald-950/40 border-emerald-900/50') : 'bg-slate-900/80 border-slate-800'}`}>
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">AI Likelihood</div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Recent Evidence (last 20 chunks)</div>
                     <div className={`text-3xl font-black font-mono ${aiLikelihood !== null ? (isSuspicious ? 'text-red-400' : 'text-emerald-400') : 'text-slate-400'}`}>
-                      {aiLikelihood !== null ? `${aiLikelihood.toFixed(1)}%` : '--'}
+                      {aiLikelihood !== null ? `${aiLikelihood.toFixed(1)}/100` : '--'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Chunk Timeline */}
-              <div className="mt-8">
+              {/* Chunk Timeline and evidence-priority sidebar */}
+              <div className="mt-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_18rem] gap-6">
+                <div>
                 <h4 className="text-xs font-semibold tracking-widest text-slate-500 mb-4 uppercase flex items-center gap-2">
                   <Activity className="w-4 h-4" /> Real-time ML Pipeline
                 </h4>
@@ -270,7 +275,7 @@ function LivePipeline() {
                       
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-400">AI Fusion Score</span>
+                          <span className="text-slate-400">Evidence Score</span>
                           <span className={`font-mono font-bold ${chunk.mlStatus === 'PENDING' ? 'text-amber-400 animate-pulse' : (chunk.deepfakeScore != null ? (chunk.deepfakeScore > 0.5 ? 'text-red-400' : 'text-emerald-400') : 'text-slate-500')}`}>
                             {chunk.mlStatus === 'PENDING' ? 'ANALYZING...' : (chunk.deepfakeScore != null ? `${(chunk.deepfakeScore * 100).toFixed(1)}%` : 'N/A')}
                           </span>
@@ -328,6 +333,36 @@ function LivePipeline() {
                     </div>
                   )}
                 </div>
+                </div>
+
+                <aside className="xl:sticky xl:top-6 h-fit bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <h4 className="text-xs font-semibold tracking-widest text-slate-300 uppercase">AI-ranked chunks</h4>
+                    <span className="text-[10px] font-mono text-slate-500">highest first</span>
+                  </div>
+                  <p className="text-[11px] leading-4 text-slate-500 mb-4">
+                    Equal scores keep the earlier chunk first. Each control plays its live PCM chunk directly.
+                  </p>
+                  <ol className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
+                    {rankedChunks.map((chunk, rank) => {
+                      const score = chunk.deepfakeScore;
+                      const scored = typeof score === 'number' && Number.isFinite(score);
+                      return (
+                        <li key={chunk.sequence} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-mono text-slate-500">#{rank + 1} · CHUNK {chunk.sequence}</span>
+                            <span className={`text-sm font-bold font-mono ${scored && score > 0.5 ? 'text-red-400' : scored ? 'text-emerald-400' : 'text-slate-500'}`}>
+                              {scored ? `${(score * 100).toFixed(1)}%` : 'Analyzing'}
+                            </span>
+                          </div>
+                          <audio controls preload="none" className="mt-2 h-8 w-full"
+                            src={`http://localhost:8010/api/live-sessions/${encodeURIComponent(session.sessionId)}/chunks/${chunk.sequence}/audio`} />
+                        </li>
+                      );
+                    })}
+                    {rankedChunks.length === 0 && <li className="text-xs text-slate-500 italic">Waiting for the first chunk…</li>}
+                  </ol>
+                </aside>
               </div>
             </div>
           </div>
