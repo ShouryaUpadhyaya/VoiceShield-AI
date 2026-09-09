@@ -21,6 +21,7 @@ model calls {
   audio_chunks      audio_chunks[]
   recordings        recordings[]
   connection_events connection_events[]
+  audit_records     audit_records[]
 }
 
 model call_sessions {
@@ -70,6 +71,35 @@ model recordings {
   duration_ms  Int
   created_at   DateTime @default(now())
   calls        calls    @relation(fields: [call_id], references: [id])
+}
+
+model audit_records {
+  id                 String   @id @default(uuid())
+  call_id            String   @unique
+  evidence_id        String   @unique @default(uuid())
+  state              String   @default("PENDING")
+  recording_path     String
+  recording_format   String
+  sample_rate_hz     Int
+  channels           Int
+  bit_depth          Int
+  audio_hash         String?
+  evidence_hash      String?
+  risk_score         String?
+  verdict            String?
+  model_id           String?
+  model_version      String?
+  transaction_hash   String?
+  block_number       Int?
+  blockchain_network String?
+  contract_address   String?
+  anchored_at        DateTime?
+  last_error         String?
+  attempt_count      Int      @default(0)
+  next_attempt_at    DateTime?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+  calls              calls    @relation(fields: [call_id], references: [id], onDelete: Cascade)
 }
 
 model ml_results {

@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "send-test": "tsx scripts/send-test-audio.ts",
     "fake-ml": "tsx scripts/fake-ml-server.ts",
+    "demo:tamper-audit": "NODE_ENV=development tsx scripts/tamper-audit-evidence.ts",
     "postinstall": "prisma generate || exit 0"
   },
   "dependencies": {
@@ -18,7 +19,9 @@
     "@prisma/config": "^7.10.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
+    "ethers": "^6.16.0",
     "express": "^5.2.1",
+    "json-canonicalize": "^1.0.6",
     "pg": "^8.23.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
@@ -35,5 +38,11 @@
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true
   }
 }

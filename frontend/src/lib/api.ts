@@ -22,16 +22,25 @@ export async function fetchLogs(): Promise<any[]> {
 }
 
 export async function fetchCallDetails(id: string): Promise<Call> {
-  const res = await fetch(`${GATEWAY_URL}/api/calls`);
+  const res = await fetch(`${GATEWAY_URL}/api/calls/${id}`);
   if (!res.ok) throw new Error('Failed to fetch call details');
-  const calls: Call[] = await res.json();
-  const call = calls.find(c => c.id === id);
-  if (!call) throw new Error('Call not found');
-  return call;
+  return res.json();
 }
 
 export function getRecordingUrl(callId: string): string {
   return `${GATEWAY_URL}/api/calls/${callId}/recording`;
+}
+
+export async function fetchAudit(callId: string): Promise<any> {
+  const res = await fetch(`${GATEWAY_URL}/api/calls/${callId}/audit`);
+  if (!res.ok) throw new Error('Failed to fetch audit record');
+  return res.json();
+}
+
+export async function verifyIntegrity(callId: string): Promise<any> {
+  const res = await fetch(`${GATEWAY_URL}/api/calls/${callId}/verify`);
+  if (!res.ok) throw new Error('Failed to verify integrity');
+  return res.json();
 }
 
 export function getWebsocketUrl(): string {

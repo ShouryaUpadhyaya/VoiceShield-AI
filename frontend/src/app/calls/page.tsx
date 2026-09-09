@@ -91,7 +91,7 @@ export default function CallHistory() {
                 </th>
                 <th className="px-6 py-4 font-medium">Audio Processed</th>
                 <th className="px-6 py-4 font-medium cursor-pointer hover:text-slate-200 transition-colors" onClick={() => toggleSort('likelihood')}>
-                  <div className="flex items-center gap-2">AI Likelihood <ArrowUpDown className="w-3 h-3" /></div>
+                  <div className="flex items-center gap-2">Mean Evidence /100 <ArrowUpDown className="w-3 h-3" /></div>
                 </th>
                 <th className="px-6 py-4 font-medium">Status</th>
                 <th className="px-6 py-4 font-medium text-right">Actions</th>
@@ -122,7 +122,7 @@ export default function CallHistory() {
                     <td className="px-6 py-4 font-mono font-bold">
                       {call.ai_likelihood_pct !== null && call.ai_likelihood_pct !== undefined ? (
                         <span className={call.ai_likelihood_pct > 50 ? 'text-red-400' : 'text-emerald-400'}>
-                          {call.ai_likelihood_pct.toFixed(1)}%
+                          {call.ai_likelihood_pct.toFixed(1)}/100
                         </span>
                       ) : '-'}
                     </td>

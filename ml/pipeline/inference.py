@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
+import threading
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,7 @@ from ml.adapters import prosody as prosody_adapter
 from ml.adapters import indic as indic_adapter
 
 logger = logging.getLogger(__name__)
+_inference_lock = threading.Lock()
 
 
 def _run_isolated(name: str, fn, *args, **kwargs) -> tuple[Any, str | None]:
@@ -48,7 +50,7 @@ def _run_isolated(name: str, fn, *args, **kwargs) -> tuple[Any, str | None]:
         return None, str(exc)
 
 
-def run_inference(
+def _run_inference(
     audio_16k: np.ndarray,
     session_id: str,
     sequence: int,
@@ -73,6 +75,16 @@ def run_inference(
         model_errors, models_available
     """
     wall_start = time.perf_counter()
+    from ml.pipeline.quality import assess_audio
+    quality = assess_audio(audio_16k)
+    if not quality["eligible"]:
+        return {"total_latency_ms": 0, "real_time_factor": 0,
+                "audio_duration_ms": np.asarray(audio_16k).size / 16,
+                "audio_quality": quality, "model_errors": {},
+                "models_available": {"dhwani": dhwani_adapter.is_loaded(),
+                                     "custom_deepfake": deepfake_adapter.is_loaded(),
+                                     "indic": indic_adapter.is_loaded(), "prosody": prosody_adapter.is_loaded(),
+                                     "speaker": speaker_adapter.is_loaded()}}
 
     audio_duration_ms = len(audio_16k) / 16000.0 * 1000.0  # should be ~3000
 
@@ -154,4 +166,11 @@ def run_inference(
         "speaker_verification": speaker_result,
         "model_errors":         model_errors,
         "models_available":     models_available,
+        "audio_quality":        quality,
     }
+
+
+def run_inference(audio_16k: np.ndarray, session_id: str, sequence: int) -> dict:
+    # Adapters share model instances; RawNet's filter bank also mutates at inference.
+    with _inference_lock:
+        return _run_inference(audio_16k, session_id, sequence)

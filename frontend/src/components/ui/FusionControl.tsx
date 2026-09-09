@@ -18,7 +18,7 @@ export function FusionControl() {
   }, [setFusionWeights]);
   
   const totalWeight = Object.values(previewWeights).reduce((a, b) => a + b, 0);
-  const isValid = Math.abs(totalWeight - 1.0) < 0.01;
+  const isValid = Number.isFinite(totalWeight) && Math.abs(totalWeight - 1.0) <= 0.0001 && previewWeights.prosody === 0;
   const isChanged = JSON.stringify(fusionWeights) !== JSON.stringify(previewWeights);
 
   const applyChanges = async () => {
@@ -51,6 +51,7 @@ export function FusionControl() {
       </div>
       
       {error && <div className="mb-4 text-xs text-rose-400">{error}</div>}
+      <p className="mb-4 text-sm text-slate-400">Demo evidence score, not a calibrated probability of fraud. Prosody is supporting evidence and has zero fusion weight.</p>
 
       <div className="space-y-4">
         {Object.entries(previewWeights).map(([key, value]) => {
@@ -60,6 +61,7 @@ export function FusionControl() {
               <div className="w-32 text-sm font-medium text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
               <input 
                 type="range" 
+                disabled={key === 'prosody'}
                 min="0" max="100" 
                 value={val100}
                 onChange={(e) => handleSlider(key as any, parseInt(e.target.value))}
@@ -67,6 +69,7 @@ export function FusionControl() {
               />
               <input 
                 type="number"
+                disabled={key === 'prosody'}
                 min="0" max="100"
                 value={val100}
                 onChange={(e) => handleSlider(key as any, parseInt(e.target.value))}

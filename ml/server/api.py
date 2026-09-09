@@ -20,18 +20,12 @@ from ml.adapters import indic as indic_adapter
 from ml.pipeline.inference import run_inference
 from ml.pipeline.results import build_score_response
 from ml.common.constants import SAMPLE_RATE
+from ml.pipeline.fusion import get_weights, set_weights
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api")
-
-# In-memory fusion weights store
-fusion_config = {
-    "indic": float(os.environ.get("FUSION_INDIC_WEIGHT", "0.45")),
-    "dhwani": float(os.environ.get("FUSION_DHWANI_WEIGHT", "0.20")),
-    "customDeepfake": float(os.environ.get("FUSION_CUSTOM_WEIGHT", "0.20")),
-    "prosody": float(os.environ.get("FUSION_PROSODY_WEIGHT", "0.15"))
-}
 
 def load_audio_file(file_bytes: bytes) -> tuple[np.ndarray, float]:
     """Load audio bytes into 16kHz mono float32 numpy array and get duration."""
@@ -46,40 +40,16 @@ def load_audio_file(file_bytes: bytes) -> tuple[np.ndarray, float]:
 
 @api_router.get("/config/fusion")
 async def get_fusion_config():
-    return {"success": True, "weights": fusion_config}
+    return {"success": True, "weights": get_weights(), "calibrated": False,
+            "policy": "sih-evidence-v1", "score_kind": "synthetic_audio_evidence"}
 
 @api_router.put("/config/fusion")
 async def update_fusion_config(payload: dict):
-    weights = payload.get("weights", {})
-    
-    # Validation
-    if not isinstance(weights, dict):
-        raise HTTPException(status_code=400, detail="weights must be an object")
-    
-    supported_models = {"indic", "dhwani", "customDeepfake", "prosody"}
-    
-    total = 0.0
-    for k, v in weights.items():
-        if k not in supported_models:
-            raise HTTPException(status_code=400, detail=f"Unsupported model: {k}")
-        if not isinstance(v, (int, float)) or v < 0 or v > 100: # Could be 0-1 or 0-100, assuming 0-1 based on initial config
-             raise HTTPException(status_code=400, detail=f"Invalid weight for {k}")
-        total += float(v)
-        
-    if not (0.99 <= total <= 1.01):
-        raise HTTPException(status_code=400, detail=f"Weights must sum to 1.0 (current total: {total})")
-        
-    for k in supported_models:
-        if k in weights:
-            fusion_config[k] = float(weights[k])
-            
-    # Also update os.environ for compatibility with existing build_score_response
-    os.environ["FUSION_INDIC_WEIGHT"] = str(fusion_config.get("indic", 0.45))
-    os.environ["FUSION_DHWANI_WEIGHT"] = str(fusion_config.get("dhwani", 0.20))
-    os.environ["FUSION_CUSTOM_WEIGHT"] = str(fusion_config.get("customDeepfake", 0.20))
-    os.environ["FUSION_PROSODY_WEIGHT"] = str(fusion_config.get("prosody", 0.15))
-    
-    return {"success": True, "weights": fusion_config}
+    try:
+        weights = set_weights(payload.get("weights"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True, "weights": weights, "calibrated": False}
 
 
 @api_router.post("/inference/pipeline")
@@ -95,15 +65,14 @@ async def run_pipeline(audio: UploadFile = File(...)):
     request_id = str(uuid.uuid4())
     
     # Run full inference orchestrator (which runs all loaded models safely)
-    result = run_inference(audio_16k, session_id=request_id, sequence=0)
-    
-    # build_score_response will apply fusion weights (pulling from os.environ which we keep synced)
-    score_res = build_score_response(
-        session_id=request_id,
-        sequence=0,
-        timestamp_ms=0,
-        inference_result=result
-    )
+    if duration_sec > 60:
+        raise HTTPException(status_code=400, detail="Pipeline uploads are limited to 60 seconds. Stream longer recordings through the gateway.")
+    from ml.pipeline.pooling import pool_responses
+    windows = []
+    for sequence, start in enumerate(range(0, max(1, len(audio_16k)), 48000)):
+        result = await run_in_threadpool(run_inference, audio_16k[start:start+48000], session_id=request_id, sequence=sequence)
+        windows.append(build_score_response(request_id, sequence, start // 16, result))
+    score_res = pool_responses(windows)
     
     return {
         "requestId": request_id,

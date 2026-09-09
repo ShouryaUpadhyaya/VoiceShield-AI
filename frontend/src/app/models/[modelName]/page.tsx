@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { MlApi } from '@/lib/mlApi';
 import { useMlLabStore } from '@/stores/ml-lab-store';
 import { AudioUpload } from '@/components/ui/AudioUpload';
+import { FolderBatchTest } from '@/components/ui/FolderBatchTest';
 import { Activity, AlertCircle, ChevronRight, FileJson } from 'lucide-react';
 import Link from 'next/link';
 
@@ -91,6 +92,13 @@ export default function SingleModelPage() {
           </div>
         </div>
       )}
+
+      {/* Batch a whole folder through this one model. Single-file testing above
+          answers "what does it say about this clip"; this answers "what does it
+          say about a corpus", which is what actually shows a model's behaviour. */}
+      <div className="mb-8">
+        <FolderBatchTest modelKey={info.key} modelName={info.name} disabled={!isReady} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-6">

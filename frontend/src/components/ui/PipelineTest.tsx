@@ -75,12 +75,14 @@ export function PipelineTest() {
             <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">AI-Generated Score</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Synthetic Audio Evidence</h3>
                   <div className={`text-4xl font-black ${
                     (result.result?.fusion?.aiGeneratedScore || 0) > 0.5 ? 'text-amber-400' : 'text-emerald-400'
                   }`}>
-                    {result.result?.fusion?.aiGeneratedScore !== undefined ? (result.result.fusion.aiGeneratedScore * 100).toFixed(1) : '--'}<span className="text-lg font-normal text-slate-500 ml-1">%</span>
+                    {typeof result.result?.fusion?.aiGeneratedScore === 'number' ? (result.result.fusion.aiGeneratedScore * 100).toFixed(1) : '--'}<span className="text-lg font-normal text-slate-500 ml-1">/100</span>
                   </div>
+                  <p className="text-xs text-slate-400 mt-2">{result.result?.risk?.status?.replaceAll('_', ' ')} · Not a probability of fraud</p>
+                  {result.result?.risk?.reasons?.length > 0 && <p className="text-xs text-amber-400 mt-1">{result.result.risk.reasons.join(', ').replaceAll('_', ' ')}</p>}
                 </div>
                 <div className="text-right">
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Latency</h3>
@@ -94,9 +96,9 @@ export function PipelineTest() {
                   {['indic', 'dhwani', 'customDeepfake', 'prosody'].map(key => {
                     const detector = result.result?.detectors?.[key];
                     const contrib = result.result?.fusion?.contributions?.[key];
-                    const meta = result.result?.models_available?.[key] === false ? 'Unavailable' : 'Complete';
-                    const score = detector?.score !== undefined ? (detector.score * 100).toFixed(1) + '%' : '—';
-                    const weight = detector?.weight !== undefined ? (detector.weight * 100).toFixed(0) + '%' : '—';
+                    const meta = detector?.status === 'complete' ? 'Complete' : 'Unavailable';
+                    const score = typeof detector?.score === 'number' ? (detector.score * 100).toFixed(1) + '%' : '—';
+                    const weight = typeof detector?.weight === 'number' ? (detector.weight * 100).toFixed(0) + '%' : '—';
                     const cont = contrib !== undefined ? (contrib * 100).toFixed(2) + '%' : '—';
                     
                     return (

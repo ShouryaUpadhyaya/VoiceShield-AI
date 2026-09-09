@@ -19,6 +19,7 @@ one is a bug we would otherwise ship:
 from __future__ import annotations
 
 import threading
+import os
 from dataclasses import asdict
 from pathlib import Path
 
@@ -32,7 +33,7 @@ from ml.common.audio_utils import (
     rms_normalize,
     sliding_windows,
 )
-from ml.common.constants import ARTIFACT_DIR
+from ml.common.constants import ARTIFACT_DIR, REPO_ROOT
 from ml.deepfake_detection.models.classifier import build_model
 
 # Cap the windows scored for one request so a 10-minute upload cannot pin the
@@ -52,6 +53,8 @@ class DeepfakePredictor:
         self.front_end = FrontEndConfig(**checkpoint["front_end"])
         self.threshold = float(checkpoint.get("dev_threshold", 0.0))
         self.temperature = float(checkpoint.get("temperature", 1.0))
+        if not np.isfinite(self.temperature) or self.temperature <= 0 or not np.isfinite(self.threshold):
+            raise ValueError("Checkpoint temperature must be positive and threshold finite")
         self.dev_eer = checkpoint.get("dev_eer_full", checkpoint.get("dev_eer"))
 
         self.model = build_model(checkpoint["model_name"], **checkpoint["model_kwargs"])
@@ -116,8 +119,12 @@ def load_predictor(checkpoint_path: str | Path | None = None) -> DeepfakePredict
     if _PREDICTOR is not None:
         return _PREDICTOR
 
+    checkpoint_path = checkpoint_path or os.getenv("DEEPFAKE_CHECKPOINT")
     if checkpoint_path is None:
-        candidates = sorted(ARTIFACT_DIR.glob("*/best.pt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Pin the intended architecture; modification time is not model selection.
+        candidates = [REPO_ROOT / "ml/artifacts/fusion_mgd_varlen_v1/best.pt",
+                      ARTIFACT_DIR / "fusion_mgd_varlen_v1/best.pt"]
+        candidates = [p for p in candidates if p.is_file()]
         if not candidates:
             return None
         checkpoint_path = candidates[0]

@@ -75,8 +75,6 @@ def _load_all_models():
 def main():
     load_dotenv()
     
-    _load_all_models()
-    
     host = os.getenv("ML_HOST", "0.0.0.0")
     port = int(os.getenv("ML_PORT", "8011"))
 

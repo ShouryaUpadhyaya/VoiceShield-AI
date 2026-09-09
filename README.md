@@ -5,9 +5,10 @@ VoiceShield is an advanced real-time voice verification and deepfake detection s
 ## Key Features
 
 - **Real-Time Chunking**: The media gateway intercepts raw PCM telephony streams from an Android device (via CallVault daemon) and forwards audio chunks (3 seconds) asynchronously to the ML pipeline.
-- **Deepfake Detection Models**: Powerful PyTorch models (Dhwani & ECAPA) evaluate deepfake probabilities and verify speaker enrollments.
+- **Audio Evidence Models**: Indic RawNet2, Dhwani ONNX and custom WavLM analyze synthetic-speech evidence; ECAPA compares speaker embeddings. ECAPA is not a deepfake detector.
 - **Live Dashboard**: Watch chunk processing, VAD, RMS Energy Waveforms, and Spectrograms in real-time on the Next.js/React frontend via WebSocket/SSE integration.
 - **PostgreSQL Persistence**: Comprehensive call records, raw chunks, and ML scores are securely saved for analysis.
+- **Blockchain Evidence Integrity**: Final WAV evidence stays playable off-chain while its SHA-256 fingerprint and canonical AI-result commitment are anchored to an append-only EVM contract. See [Blockchain Audit Trail](docs/BLOCKCHAIN_AUDIT_TRAIL.md) for local setup, verification, threat model, and SIH tampering demo.
 - **Android Integration**: Native integration with CallVault (privileged daemon on Android) to intercept audio streams directly at the OS level.
 - FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
 
@@ -66,12 +67,15 @@ pip install --extra-index-url https://download.pytorch.org/whl/cu126 -r ml/requi
 
 # Start the Real-Time ML Engine (Runs on port 8011)
 # IMPORTANT: You MUST run this from the root VoiceShield-AI directory!
+# Install service and analysis dependencies, then start the gateway-compatible ML service
+pip install -r ml/requirements.txt -r backend/requirements.txt python-dotenv
 python -m ml.server.main
-
-# (Optional) Start the legacy REST Backend (Runs on port 8000)
-# cd backend
-# PYTHONPATH=.. uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+> The active ML service is on port 8011. `backend/app` is an older API with separate scoring and demo placeholders; it is not the validated gateway path.
+
+## SIH validation and score interpretation
+
+Read [the model audit](docs/research/SIH_MODEL_AUDIT.md) for measured capabilities, weaknesses, model comparisons and sources, and [the demo runbook](docs/SIH_DEMO.md) for setup and validation commands. The current result is a 0–100 **synthetic-audio evidence index**, not a calibrated probability of fraud. Missing evidence yields an unknown result. Public deployment is not validated.
 
 ### 3. Frontend Dashboard (Next.js)
 

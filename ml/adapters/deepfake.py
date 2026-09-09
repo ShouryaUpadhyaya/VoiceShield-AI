@@ -51,7 +51,10 @@ def load_deepfake(checkpoint_path=None) -> bool:
             )
             return False
         _predictor = pred
-        _model_version = pred.checkpoint_path.name
+        import hashlib
+        with pred.checkpoint_path.open("rb") as stream:
+            fingerprint = hashlib.file_digest(stream, "sha256").hexdigest()
+        _model_version = f"{pred.checkpoint_path.parent.name}@{fingerprint[:12]}"
         logger.info("DEEPFAKE_LOADED", extra={"checkpoint": str(pred.checkpoint_path)})
         return True
     except ImportError as exc:
