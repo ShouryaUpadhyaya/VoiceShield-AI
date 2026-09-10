@@ -45,6 +45,8 @@ class ChunkMetadata:
     channels: int
     encoding: str
     bytes: int
+    call_metadata_risk: float = 0.0
+    behavioral_context_risk: float = 0.0
 
 
 def parse_metadata(text: str) -> ChunkMetadata:
@@ -82,6 +84,8 @@ def parse_metadata(text: str) -> ChunkMetadata:
             channels=int(obj["channels"]),
             encoding=str(obj["encoding"]),
             bytes=int(obj["bytes"]),
+            call_metadata_risk=float(obj.get("call_metadata_risk", 0.0)),
+            behavioral_context_risk=float(obj.get("behavioral_context_risk", 0.0)),
         )
     except (TypeError, ValueError) as exc:
         raise ProtocolError("INVALID_FIELD_TYPE", f"Metadata field type error: {exc}") from exc

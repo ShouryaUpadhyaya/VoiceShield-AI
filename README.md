@@ -10,7 +10,14 @@ VoiceShield is an advanced real-time voice verification and deepfake detection s
 - **PostgreSQL Persistence**: Comprehensive call records, raw chunks, and ML scores are securely saved for analysis.
 - **Blockchain Evidence Integrity**: Final WAV evidence stays playable off-chain while its SHA-256 fingerprint and canonical AI-result commitment are anchored to an append-only EVM contract. See [Blockchain Audit Trail](docs/BLOCKCHAIN_AUDIT_TRAIL.md) for local setup, verification, threat model, and SIH tampering demo.
 - **Android Integration**: Native integration with CallVault (privileged daemon on Android) to intercept audio streams directly at the OS level.
-- **FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
+- FreeSWITCH Integration**: Handles SIP signaling and streams raw PCM audio into the ML backend.
+
+---
+
+## Download CallVault (Android)
+
+You can download the latest debug build of the VoiceShield CallVault daemon for Android devices here:
+**[Download VoiceShield-CallVault-Debug.apk (v1.0.0)](https://github.com/ShouryaUpadhyaya/VoiceShield-AI/raw/main/releases/VoiceShield-CallVault-Debug.apk)**
 
 ---
 
@@ -20,6 +27,7 @@ Before starting, make sure you have:
 - Node.js (v18+)
 - Python (3.10+)
 - PostgreSQL Database
+- Git LFS (Large File Storage) for downloading model weights
 - Docker & Docker Compose (for Media Gateway testing with FreeSWITCH)
 
 ---
@@ -52,12 +60,19 @@ The ML service (port 8000 / 8011) processes audio chunks and runs deepfake infer
 
 ```bash
 # From the VoiceShield-AI root directory
+
+# Ensure Git LFS is installed and pull the large model weights
+git lfs install
+git lfs pull
+
 python3 -m venv .venv
 source .venv/bin/activate
 
 # Install requirements with CUDA 12.6 support (if using GPU)
 pip install --extra-index-url https://download.pytorch.org/whl/cu126 -r ml/requirements-torch.txt
 
+# Start the Real-Time ML Engine (Runs on port 8011)
+# IMPORTANT: You MUST run this from the root VoiceShield-AI directory!
 # Install service and analysis dependencies, then start the gateway-compatible ML service
 pip install -r ml/requirements.txt -r backend/requirements.txt python-dotenv
 python -m ml.server.main
@@ -82,6 +97,18 @@ npm install
 # Start the development server
 npm run dev
 ```
+
+### 4. CallVault Android App Setup
+
+CallVault does not require Shizuku or a PC to intercept telephony audio. It establishes a local persistent privileged daemon entirely on-device by talking directly to your phone's internal Wireless Debugging port.
+
+1. Enable **Developer Options**, then **Wireless Debugging**, on your Android device.
+2. Install and open the CallVault app (see the Download section above).
+3. Follow the onboarding wizard:
+   - Grant **notifications** (required to see the pairing prompt).
+   - Complete the **one-time Wireless Debugging pairing** by entering the pairing code and port shown in your Android settings.
+   - Grant the remaining permissions (phone state, call log, contacts, battery exemption).
+4. Accept the **USB debugging** prompt when onboarding offers it. CallVault will then automatically handle keeping the necessary services alive without requiring a cable.
 
 ---
 

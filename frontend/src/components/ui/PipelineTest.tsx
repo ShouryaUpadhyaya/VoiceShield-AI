@@ -93,8 +93,9 @@ export function PipelineTest() {
               <div className="p-6 bg-slate-900/50">
                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Score Breakdown</h4>
                 <div className="space-y-4">
-                  {['indic', 'dhwani', 'customDeepfake', 'prosody'].map(key => {
-                    const detector = result.result?.detectors?.[key];
+                  {['indic', 'dhwani', 'prosody'].map(key => {
+                    const detector = result.result?.fusion?.detectors?.[key];
+                    if (!detector) return null;
                     const contrib = result.result?.fusion?.contributions?.[key];
                     const meta = detector?.status === 'complete' ? 'Complete' : 'Unavailable';
                     const score = typeof detector?.score === 'number' ? (detector.score * 100).toFixed(1) + '%' : '—';

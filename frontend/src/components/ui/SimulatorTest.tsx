@@ -7,7 +7,7 @@ export function SimulatorTest() {
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<string | null>(null);
   
-  const [targetPath, setTargetPath] = useState('');
+  const [targetPath, setTargetPath] = useState('/home/shouryaupadhyaya/Programming/VoiceShield-AI/data/wavs/fake/easy');
   const [concurrency, setConcurrency] = useState(1);
   const [speed, setSpeed] = useState(2.0);
   const [showInfo, setShowInfo] = useState(false);

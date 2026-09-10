@@ -360,11 +360,11 @@ if (process.env.NODE_ENV !== 'test') {
   mlClient.connect();
   mlClient.on('score', (msg) => {
     if (msg.metadata?.session_id) {
+      // Forward the full ML result object to the dashboard
       dashboardIo.emit('ml_result', {
+        ...msg,
         session_id: msg.metadata.session_id,
-        window_seq: msg.window_seq,
-        status: msg.status,
-        signals: msg.signals,
+        window_seq: msg.window_seq
       });
     }
   });
