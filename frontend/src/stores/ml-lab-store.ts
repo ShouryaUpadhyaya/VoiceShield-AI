@@ -31,16 +31,16 @@ export interface MlLabState {
 export const useMlLabStore = create<MlLabState>((set, get) => ({
   modelsStatus: {},
   fusionWeights: {
-    indic: 1,
-    dhwani: 0,
+    indic: 0.1,
+    dhwani: 0.8,
     customDeepfake: 0,
-    prosody: 0,
+    prosody: 0.1,
   },
   previewWeights: {
-    indic: 1,
-    dhwani: 0,
+    indic: 0.1,
+    dhwani: 0.8,
     customDeepfake: 0,
-    prosody: 0,
+    prosody: 0.1,
   },
   currentFile: null,
 

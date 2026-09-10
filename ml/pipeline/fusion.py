@@ -8,7 +8,7 @@ import threading
 _config_lock = threading.RLock()
 
 # Best integrated candidate on historical dev EER. Still provisional for live calls.
-DEFAULT_WEIGHTS = {"indic": 0.0, "dhwani": 1.0, "customDeepfake": 0.0, "prosody": 0.0}
+DEFAULT_WEIGHTS = {"indic": 0.1, "dhwani": 0.8, "customDeepfake": 0.0, "prosody": 0.1}
 ENV_KEYS = {"indic": "FUSION_INDIC_WEIGHT", "dhwani": "FUSION_DHWANI_WEIGHT",
             "customDeepfake": "FUSION_CUSTOM_WEIGHT", "prosody": "FUSION_PROSODY_WEIGHT"}
 

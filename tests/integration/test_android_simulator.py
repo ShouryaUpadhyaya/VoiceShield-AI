@@ -117,6 +117,8 @@ async def run_tests(path: str, concurrency: int, speed: float):
         if not files:
             print(f"No audio files found in directory {path}")
             return
+        import random
+        random.shuffle(files)
         print(f"Found {len(files)} audio files in dataset.")
     else:
         if not os.path.exists(path):
