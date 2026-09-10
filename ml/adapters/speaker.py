@@ -160,8 +160,9 @@ def run(audio_16k: np.ndarray) -> dict | None:
                     best_id = speaker_id
 
             if best_sim >= SPEAKER_MATCH_THRESHOLD:
+                import re
                 result["status"] = "matched"
-                result["speaker_id"] = best_id
+                result["speaker_id"] = re.sub(r'_part\d+$', '', best_id)
                 result["similarity"] = round(best_sim, 4)
             else:
                 result["status"] = "unmatched"
@@ -175,3 +176,65 @@ def run(audio_16k: np.ndarray) -> dict | None:
     except Exception as exc:
         logger.error("SPEAKER_INFERENCE_ERROR", extra={"error": str(exc)})
         raise
+
+def enroll_speaker(speaker_id: str, audio_16k: np.ndarray) -> bool:
+    """Enroll a new speaker into the database. Cuts into 15-second chunks to prevent OOM and improve matching."""
+    global _enrolled_speakers, _embedder
+    if _embedder is None:
+        raise ValueError("ECAPA embedder is not loaded.")
+    
+    if _enrolled_speakers is None:
+        _enrolled_speakers = {}
+        
+    # 15 seconds at 16000 Hz = 240000 samples
+    max_samples = 15 * 16000
+    num_chunks = max(1, (len(audio_16k) + max_samples - 1) // max_samples)
+    
+    success = False
+    for i in range(num_chunks):
+        start = i * max_samples
+        end = min((i + 1) * max_samples, len(audio_16k))
+        chunk = audio_16k[start:end]
+        
+        # Skip chunks that are extremely short (less than 1s) unless it's the only one
+        if len(chunk) < 16000 and num_chunks > 1:
+            continue
+            
+        embedding = _embedder.embed(chunk, sr=16000)
+        chunk_id = speaker_id if num_chunks == 1 else f"{speaker_id}_part{i+1}"
+        _enrolled_speakers[chunk_id] = embedding
+        success = True
+    
+    enroll_path = Path("models/enrolled_speakers.npz")
+    enroll_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        np.savez(enroll_path, **_enrolled_speakers)
+        logger.info(f"Successfully enrolled speaker {speaker_id} (cut into {num_chunks} chunks)")
+        return success
+    except Exception as e:
+        logger.error(f"Failed to save enrollment database: {e}")
+        return False
+
+def enroll_directory(directory_path: str) -> dict:
+    """Recursively find and enroll all .wav files in a directory."""
+    import librosa
+    path = Path(directory_path)
+    if not path.exists() or not path.is_dir():
+        return {"error": f"Directory not found: {directory_path}"}
+        
+    enrolled = []
+    failed = []
+    
+    for file in path.glob("**/*.wav"):
+        try:
+            audio, _ = librosa.load(file, sr=16000, mono=True)
+            speaker_id = file.stem
+            if enroll_speaker(speaker_id, audio):
+                enrolled.append(speaker_id)
+            else:
+                failed.append(speaker_id)
+        except Exception as e:
+            failed.append(f"{file.stem} ({str(e)})")
+            
+    return {"enrolled": enrolled, "failed": failed}

@@ -39,6 +39,7 @@ export interface Chunk {
   latencyMs?: number;
   anomalyScore?: number;
   speakerMatch?: string;
+  rawResult?: any;
 }
 
 export interface ConnectionEvent {

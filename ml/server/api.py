@@ -183,3 +183,40 @@ async def get_models():
             }
         }
     }
+
+from fastapi import Form
+
+@api_router.post("/speaker/enroll")
+async def enroll_speaker_api(speaker_id: str = Form(...), audio: UploadFile = File(...)):
+    file_bytes = await audio.read()
+    max_mb = int(os.environ.get("MAX_TEST_AUDIO_MB", "25"))
+    if len(file_bytes) > max_mb * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File exceeds maximum allowed size ({max_mb} MB).")
+        
+    audio_16k, duration_sec = load_audio_file(file_bytes)
+    
+    if not speaker_adapter.is_loaded():
+        raise HTTPException(status_code=503, detail="Speaker Verification model is unavailable.")
+        
+    success = speaker_adapter.enroll_speaker(speaker_id, audio_16k)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to enroll speaker.")
+        
+    return {"success": True, "speaker_id": speaker_id, "duration_sec": round(duration_sec, 2)}
+
+@api_router.post("/speaker/enroll-directory")
+def enroll_directory_api(payload: dict):
+    directory_path = payload.get("directory_path")
+    if not directory_path:
+        raise HTTPException(status_code=400, detail="directory_path is required.")
+        
+    if not speaker_adapter.is_loaded():
+        raise HTTPException(status_code=503, detail="Speaker Verification model is unavailable.")
+        
+    result = speaker_adapter.enroll_directory(directory_path)
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+        
+    return result

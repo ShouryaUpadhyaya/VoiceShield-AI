@@ -110,7 +110,7 @@ apiRouter.get('/live-sessions/:sessionId/chunks/:sequence/audio', async (req, re
     const sequence = Number.parseInt(req.params.sequence, 10);
     if (!Number.isInteger(sequence) || sequence < 0) return res.status(400).json({ error: 'Invalid chunk sequence' });
     const call = await prisma.calls.findFirst({
-      where: { session_id: req.params.sessionId, status: 'IN_PROGRESS' },
+      where: { session_id: req.params.sessionId },
       include: { audio_streams: { take: 1 }, audio_chunks: { orderBy: { sequence_number: 'asc' } } },
     });
     const target = call?.audio_chunks.find(chunk => chunk.sequence_number === sequence);
@@ -120,12 +120,26 @@ apiRouter.get('/live-sessions/:sessionId/chunks/:sequence/audio', async (req, re
     const safeSessionId = path.basename(call.session_id);
     if (safeSessionId !== call.session_id) return res.status(400).json({ error: 'Invalid session identifier' });
     const tempPath = path.resolve(path.join(__dirname, '..', 'data', 'calls', `${safeSessionId}.pcm.tmp`));
+    const wavPath = path.resolve(path.join(__dirname, '..', 'data', 'calls', `${safeSessionId}.wav`));
     const safeBase = path.resolve(path.join(__dirname, '..', 'data', 'calls'));
-    if (!tempPath.startsWith(safeBase) || !fs.existsSync(tempPath)) return res.status(404).json({ error: 'Live audio is no longer available' });
+    
+    let filePath = tempPath;
+    let headerOffset = 0;
+    
+    if (!tempPath.startsWith(safeBase)) return res.status(404).json({ error: 'Invalid path' });
+    
+    if (!fs.existsSync(tempPath)) {
+      if (fs.existsSync(wavPath)) {
+        filePath = wavPath;
+        headerOffset = 44; // WAV header size
+      } else {
+        return res.status(404).json({ error: 'Live audio is no longer available' });
+      }
+    }
 
     const offset = call.audio_chunks.filter(chunk => chunk.sequence_number < sequence)
       .reduce((total, chunk) => total + chunk.byte_size, 0);
-    const pcm = (await fsp.readFile(tempPath)).subarray(offset, offset + target.byte_size);
+    const pcm = (await fsp.readFile(filePath)).subarray(headerOffset + offset, headerOffset + offset + target.byte_size);
     if (pcm.length !== target.byte_size) return res.status(409).json({ error: 'Chunk audio has not fully persisted yet' });
     res.setHeader('Content-Type', 'audio/wav');
     res.send(pcm16ToWav(pcm, stream.sample_rate, stream.channels));

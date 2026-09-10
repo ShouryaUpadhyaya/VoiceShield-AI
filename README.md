@@ -27,6 +27,7 @@ Before starting, make sure you have:
 - Node.js (v18+)
 - Python (3.10+)
 - PostgreSQL Database
+- Git LFS (Large File Storage) for downloading model weights
 - Docker & Docker Compose (for Media Gateway testing with FreeSWITCH)
 
 ---
@@ -59,6 +60,11 @@ The ML service (port 8000 / 8011) processes audio chunks and runs deepfake infer
 
 ```bash
 # From the VoiceShield-AI root directory
+
+# Ensure Git LFS is installed and pull the large model weights
+git lfs install
+git lfs pull
+
 python3 -m venv .venv
 source .venv/bin/activate
 

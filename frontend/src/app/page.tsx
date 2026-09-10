@@ -65,7 +65,6 @@ function ArchitecturePipeline() {
   const models = [
     { name: 'Indic Detector', id: 'indic' },
     { name: 'Dhwani', id: 'dhwani' },
-    { name: 'Custom Deepfake', id: 'custom_deepfake' },
     { name: 'Prosody Analyzer', id: 'prosody' },
     { name: 'Speaker (ECAPA)', id: 'speaker' }
   ];
@@ -290,11 +289,19 @@ function LivePipeline() {
                           </div>
                         )}
                         
+                        {chunk.rawResult?.detectors?.dhwani && (
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-800/50">
+                            <span className="text-slate-500">Dhwani Score</span>
+                            <span className={`font-mono ${chunk.rawResult.detectors.dhwani.score != null ? (chunk.rawResult.detectors.dhwani.score > 0.5 ? 'text-red-400/80' : 'text-emerald-400/80') : 'text-slate-600'}`}>
+                              {chunk.rawResult.detectors.dhwani.score != null ? `${(chunk.rawResult.detectors.dhwani.score * 100).toFixed(1)}%` : 'N/A'}
+                            </span>
+                          </div>
+                        )}
+                        
                         {chunk.rawResult?.fusion?.weights && (
                           <div className="flex w-full h-1.5 mt-2 rounded-full overflow-hidden bg-slate-800">
                             <div style={{ width: `${(chunk.rawResult.fusion.weights.indic || 0) * 100}%` }} className="bg-indigo-500" title={`Indic Weight: ${(chunk.rawResult.fusion.weights.indic * 100).toFixed(0)}%`} />
                             <div style={{ width: `${(chunk.rawResult.fusion.weights.dhwani || 0) * 100}%` }} className="bg-blue-500" title={`Dhwani Weight: ${(chunk.rawResult.fusion.weights.dhwani * 100).toFixed(0)}%`} />
-                            <div style={{ width: `${(chunk.rawResult.fusion.weights.customDeepfake || 0) * 100}%` }} className="bg-cyan-500" title={`Custom Weight: ${(chunk.rawResult.fusion.weights.customDeepfake * 100).toFixed(0)}%`} />
                             <div style={{ width: `${(chunk.rawResult.fusion.weights.prosody || 0) * 100}%` }} className="bg-purple-500" title={`Prosody Weight: ${(chunk.rawResult.fusion.weights.prosody * 100).toFixed(0)}%`} />
                           </div>
                         )}

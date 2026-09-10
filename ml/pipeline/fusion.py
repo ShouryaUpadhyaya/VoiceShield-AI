@@ -8,7 +8,7 @@ import threading
 _config_lock = threading.RLock()
 
 # Best integrated candidate on historical dev EER. Still provisional for live calls.
-DEFAULT_WEIGHTS = {"indic": 1.0, "dhwani": 0.0, "customDeepfake": 0.0, "prosody": 0.0}
+DEFAULT_WEIGHTS = {"indic": 0.0, "dhwani": 1.0, "customDeepfake": 0.0, "prosody": 0.0}
 ENV_KEYS = {"indic": "FUSION_INDIC_WEIGHT", "dhwani": "FUSION_DHWANI_WEIGHT",
             "customDeepfake": "FUSION_CUSTOM_WEIGHT", "prosody": "FUSION_PROSODY_WEIGHT"}
 
@@ -19,8 +19,7 @@ def validate_weights(weights):
     for value in weights.values():
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
             raise ValueError("Weights must be finite numbers between 0 and 1")
-    if weights["prosody"] != 0:
-        raise ValueError("Prosody is an acoustic anomaly heuristic; its deepfake weight must be zero")
+
     if not math.isclose(sum(weights.values()), 1.0, abs_tol=1e-4):
         raise ValueError("Weights must sum to 1.0")
     return {k: float(weights[k]) for k in DEFAULT_WEIGHTS}
